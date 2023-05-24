@@ -1,4 +1,5 @@
 import flopy as fp
+import matplotlib.pyplot as plt
 import os
 
 import numpy as np
@@ -26,4 +27,9 @@ else:
 
 fa = FlowDirections(modelgrid, dem_data)
 
+fdir = fa.flow_directions
+
+plt.imshow(fdir, interpolation=None)
+plt.colorbar()
+plt.show()
 
