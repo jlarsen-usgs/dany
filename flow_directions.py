@@ -54,7 +54,7 @@ class FlowDirections:
 
         self._fmask = np.where(self._fneighbors == self._fillidx)
 
-    def _calculate_slopes(self, threshold=1e-04):
+    def _calculate_slopes(self, threshold=1e-06):
         """
 
         :param threshold:
@@ -68,7 +68,7 @@ class FlowDirections:
         y1 = self._ycenters[self._fneighbors]
 
         drop = neighbor_elevation - cell_elevation
-        drop = np.where(drop < threshold, threshold, drop)
+        drop = np.where((drop < threshold) & (drop > 0), 0, drop)
         asq = (x1 - x0) ** 2
         bsq = (y1 - y0) ** 2
         dist = np.sqrt(asq + bsq)
@@ -97,6 +97,10 @@ class FlowDirections:
             flow_to = fcells[ix]
             if len(flow_to) == 1:
                 self._fdir[ix] = self._fneighbors[ix, flow_to[0]]
+            elif len(flow_to) == 2:
+                self._fdir[ix] = self._fneighbors[ix, flow_to[0]]
+            elif len(flow_to) == 3:
+                self._fdir[ix] = self._fneighbors[ix, flow_to[-1]]
 
             else:
                 # todo: now implement dijkstra's algorithm
@@ -111,6 +115,7 @@ class FlowDirections:
                 # todo: need to create a stack that we iterate through
                 tmp_stack = list(conns)
                 visited = []
+                print('running dijkstra')
                 while True:
                     n = 0
                     for cell in tmp_stack:
@@ -210,11 +215,40 @@ class FlowDirections:
 
         return dest, conns, sink
 
-    def get_nidp(self, cell):
+    def get_nidp(self):
         """
         Method to calculate the number of input drainage paths of a cell
 
         :param cell:
         :return:
         """
-        pass
+        nidp_array = np.zeros(self._fdir.size)
+
+        # todo: we could also do area of each cell to make this more accurate
+        for cell in self._fdir:
+            nidp_array[cell] += 1
+
+        return nidp_array
+
+    def flow_acculumation(self):
+        """
+
+        :return:
+        """
+        nidp_array = self.get_nidp()
+        flow_accumulation = np.ones(self._shape).ravel()
+        for ix, nidp_val in enumerate(nidp_array):
+            if nidp_val != 0:
+                continue
+
+            n = ix
+            naccu = 0
+            while True:
+                flow_accumulation[n] += naccu
+                naccu = flow_accumulation[n]
+                if nidp_array[n] >= 2:
+                    nidp_array[n] -= 1
+                    break
+                n = self._fdir[n]
+
+        return flow_accumulation.reshape(self._shape)

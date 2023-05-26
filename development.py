@@ -28,8 +28,10 @@ else:
 fa = FlowDirections(modelgrid, dem_data)
 
 fdir = fa.flow_directions
+nidp = fa.get_nidp().reshape(fa._shape)
+facc = fa.flow_acculumation()
 
-plt.imshow(fdir, interpolation=None)
+plt.imshow(facc, interpolation=None)
 plt.colorbar()
 plt.show()
 
