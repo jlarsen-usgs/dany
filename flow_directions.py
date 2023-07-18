@@ -16,6 +16,7 @@ class FlowDirections:
             self._shape = self._modelgrid.shape
 
         self._neighbors = modelgrid.neighbors(method="queen")
+        self._area = self._shoelace_area()
         self._fneighbors = None
         # self._dem = dem.ravel()
         self._dem = np.array(list(dem.ravel()) + [1e+10])
@@ -23,6 +24,8 @@ class FlowDirections:
         self._ycenters = np.array(list(modelgrid.ycellcenters.ravel()) + [np.mean(modelgrid.ycellcenters) + 0.1])
 
         self._fdir = np.full(self._dem.size - 1, -1)
+        self._fdir_r = None
+        self._facc = None
         self._fillval = self._dem[-1]
         self._fillidx = self._modelgrid.ncpl
         self._fill_irregular_neighbor_array()
@@ -32,6 +35,34 @@ class FlowDirections:
     @property
     def flow_directions(self):
         return self._fdir.reshape(self._shape)
+
+    @property
+    def flow_accumulation(self):
+        return self._facc.reshape(self._shape)
+
+    def _shoelace_area(self):
+        """
+        Use shoelace algorithm for non-self-intersecting polygons to
+        calculate area.
+
+        Returns
+        -------
+
+        """
+        # irregular_shape_patch
+        from flopy.plot.plotutil import UnstructuredPlotUtilities
+        # when looping through to create determinants, need to start at -1
+        xverts, yverts = self._modelgrid.cross_section_vertices
+        xverts, yverts = UnstructuredPlotUtilities.irregular_shape_patch(
+            xverts, yverts
+        )
+        area_x2 = np.zeros((1, len(xverts)))
+        for i in range(xverts.shape[-1]):
+            # calculate the determinant of each line in polygon
+            area_x2 += xverts[:, i - 1] * yverts[:, i] - yverts[:, i - 1] * xverts[:, i]
+
+        area = area_x2 / 2.
+        return np.ravel(area)
 
     def _fill_irregular_neighbor_array(self):
         """
@@ -101,18 +132,14 @@ class FlowDirections:
                 self._fdir[ix] = self._fneighbors[ix, flow_to[0]]
             elif len(flow_to) == 3:
                 self._fdir[ix] = self._fneighbors[ix, flow_to[-1]]
-
             else:
-                # todo: now implement dijkstra's algorithm
-                #  using path distance as a weight.
                 dest = None
                 sink = True
                 self._stack = defaultdict(set)
                 conns = self._fneighbors[ix, flow_to]
-                n = 0
                 for conn in conns:
                     self._stack[conn].add(ix)
-                # todo: need to create a stack that we iterate through
+
                 tmp_stack = list(conns)
                 visited = []
                 print('running dijkstra')
@@ -198,7 +225,7 @@ class FlowDirections:
         """
 
         :param cell:
-        :param flow_neighbors:
+        :param flow_to:
         :return:
         """
         sink = True
@@ -215,16 +242,36 @@ class FlowDirections:
 
         return dest, conns, sink
 
+    def _reverse_flow_directions(self):
+        """
+        Method to calculate an array of reversed flow directions for
+        watershed delineation
+
+        Returns
+        -------
+        None
+        """
+        if self._fdir_r is not None:
+            return self._fdir_r
+
+        else:
+            max_nidp = np.max(self.get_nidp())
+            self._fdir_r = np.full((max_nidp, self._fdir.size), -1, dtype=int)
+            for ix, fdir in enumerate(self._fdir):
+                for jx in range(max_nidp):
+                    if self._fdir_r[jx, fdir] == -1:
+                        self._fdir_r[jx, fdir] = ix
+                        break
+            return self._fdir_r
+
     def get_nidp(self):
         """
         Method to calculate the number of input drainage paths of a cell
 
-        :param cell:
         :return:
         """
-        nidp_array = np.zeros(self._fdir.size)
+        nidp_array = np.zeros(self._fdir.size, dtype=int)
 
-        # todo: we could also do area of each cell to make this more accurate
         for cell in self._fdir:
             nidp_array[cell] += 1
 
@@ -236,19 +283,69 @@ class FlowDirections:
         :return:
         """
         nidp_array = self.get_nidp()
-        flow_accumulation = np.ones(self._shape).ravel()
+        flow_acc = np.ones(self._shape).ravel()
+        flow_acc_area = np.copy(self._area) # np.zeros(self._shape).ravel()
         for ix, nidp_val in enumerate(nidp_array):
             if nidp_val != 0:
                 continue
 
             n = ix
             naccu = 0
+            area = 0
             while True:
-                flow_accumulation[n] += naccu
-                naccu = flow_accumulation[n]
+                flow_acc[n] += naccu
+                flow_acc_area[n] += area
+                naccu = flow_acc[n]
+                area = flow_acc_area[n]
                 if nidp_array[n] >= 2:
                     nidp_array[n] -= 1
                     break
                 n = self._fdir[n]
 
-        return flow_accumulation.reshape(self._shape)
+        self._facc = flow_acc
+        return flow_acc.reshape(self._shape)
+
+    def get_watershed_boundary(self, point):
+        """
+
+        point :
+
+
+        :return:
+        """
+        from flopy.utils.geospatial_utils import GeoSpatialUtil
+
+        if isinstance(point, (tuple, list, np.ndarray)):
+            if len(point) != 2:
+                raise AssertionError(
+                    "point must be an interable with only x, y values"
+                )
+        else:
+            point = GeoSpatialUtil(point, shapetype='point').points
+
+        cellid = self._modelgrid.intersect(*point)
+        if isinstance(cellid, tuple):
+            cellid = (0,) + cellid
+            cellid = self._modelgrid.get_node([cellid,])[0]
+
+        fdir_r = self._reverse_flow_directions()
+        nidp = self.get_nidp()
+        subbasins = np.zeros(self._fdir.shape, dtype=int)
+        subbasins[cellid] = 1
+        nidp_cell = nidp[cellid]
+        stack = fdir_r[:nidp_cell, cellid].tolist()
+        while stack:
+            cellid = stack[0]
+            if subbasins[cellid] != 0:
+                pass
+            else:
+                subbasins[cellid] = 1
+                nidp_cell = nidp[cellid]
+                if nidp_cell == 0:
+                    pass
+                else:
+                    stack += fdir_r[:nidp_cell, cellid].tolist()
+
+            stack.pop(0)
+
+        return subbasins.reshape(self._shape)
