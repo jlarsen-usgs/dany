@@ -302,10 +302,10 @@ class FlowDirections:
                     break
                 n = self._fdir[n]
 
-        self._facc = flow_acc
-        return flow_acc.reshape(self._shape)
+        self._facc = flow_acc_area
+        return flow_acc_area.reshape(self._shape)
 
-    def get_watershed_boundary(self, point):
+    def get_watershed_boundary(self, point, **kwargs):
         """
 
         point :
@@ -329,23 +329,168 @@ class FlowDirections:
             cellid = self._modelgrid.get_node([cellid,])[0]
 
         fdir_r = self._reverse_flow_directions()
-        nidp = self.get_nidp()
-        subbasins = np.zeros(self._fdir.shape, dtype=int)
-        subbasins[cellid] = 1
-        nidp_cell = nidp[cellid]
-        stack = fdir_r[:nidp_cell, cellid].tolist()
+        nidp_array = self.get_nidp()
+        subbasins = kwargs.pop("subbasins", np.zeros(self._fdir.shape, dtype=int))
+        subbasin_id = np.max(subbasins) + 1
+        subbasins[cellid] = subbasin_id
+        nidp = nidp_array[cellid]
+        stack = fdir_r[:nidp, cellid].tolist()
         while stack:
             cellid = stack[0]
             if subbasins[cellid] != 0:
                 pass
             else:
-                subbasins[cellid] = 1
-                nidp_cell = nidp[cellid]
-                if nidp_cell == 0:
+                subbasins[cellid] = subbasin_id
+                nidp = nidp_array[cellid]
+                if nidp == 0:
                     pass
                 else:
-                    stack += fdir_r[:nidp_cell, cellid].tolist()
+                    stack += fdir_r[:nidp, cellid].tolist()
 
             stack.pop(0)
 
         return subbasins.reshape(self._shape)
+
+    def get_subbasins(self, points):
+        """
+
+        :param points:
+        :return:
+        """
+        from flopy.utils.geospatial_utils import GeoSpatialCollection
+
+        if isinstance(points, (tuple, list, np.ndarray)):
+            for point in points:
+                if len(point) != 2:
+                    raise AssertionError(
+                        "each point must be an interable with only x, y values"
+                    )
+        else:
+            points = GeoSpatialCollection(points, shapetype='point').points
+
+        cellids = []
+        for point in points:
+            cellid = self._modelgrid.intersect(*point)
+            if isinstance(cellid, tuple):
+                cellid = (0,) + cellid
+                cellid = self._modelgrid.get_node([cellid, ])[0]
+
+            cellids.append(cellid)
+
+        graph = {}
+        visited = []
+        for cellid in cellids:
+            current = cellid
+            while True:
+                if cellid in visited:
+                    graph[current] = -1
+                    break
+                elif cellid not in cellids or cellid == current:
+                    if cellid != current:
+                        visited.append(cellid)
+                    cellid = self._fdir[cellid]
+                else:
+                    graph[current] = cellid
+                    break
+
+        topo = Topology()
+        for cellid, cellid_to in graph.items():
+            topo.add_connection(cellid, cellid_to)
+
+        topo.add_connection(-1, -1)
+        solution_order = topo.sort()[:-1]
+        solution_idxs = [cellids.index(cellid) for cellid in solution_order]
+
+        subbasins = np.zeros(self._fdir.shape, dtype=int)
+        for ix, point_idx in enumerate(solution_idxs):
+            point = points[point_idx]
+            subbasins = self.get_watershed_boundary(
+                point, subbasins=subbasins.ravel()
+            )
+        return subbasins
+
+
+class Topology(object):
+    """
+    A topological sort method that uses a modified Khan algorithm to sort the
+    SFR network
+
+    Parameters
+    ----------
+    n_segments : int
+        number of sfr segments in network
+
+    """
+
+    def __init__(self, nss=None):
+        self.topology = dict()
+        self.nss = nss
+
+    def add_connection(self, iseg, ioutseg):
+        """
+        Method to add a topological connection
+
+        Parameters
+        ----------
+        iseg : int
+            current segment number
+        ioutseg : int
+            output segment number
+        """
+        self.topology[iseg] = ioutseg
+
+    def _sort_util(self, seg, visited, stack):
+        """
+        Recursive function used by topological
+        sort to perform sorting
+
+        Parameters
+        ----------
+        seg : int
+            segment number
+        visited : list
+            list of bools to indicate if location visited
+        stack : list
+            stack of sorted segment numbers
+
+        """
+        visited[seg] = True
+        if seg == 0:
+            ioutseg = 0
+        else:
+            ioutseg = self.topology[seg]
+
+        if not visited[ioutseg]:
+            self._sort_util(ioutseg, visited, stack)
+
+        if seg == 0:
+            pass
+        elif ioutseg == 0:
+            stack.append(seg)
+        else:
+            stack.insert(0, seg)
+
+    def sort(self):
+        """
+        Method to perform a topological sort
+        on the streamflow network
+
+        Returns
+        -------
+            stack: list of ordered nodes
+
+        """
+        visited = {0: False}
+        for key in self.topology:
+            visited[key] = False
+
+        stack = []
+        for i in sorted(visited):
+            if i == 0:
+                pass
+            else:
+                if not visited[i]:
+                    self._sort_util(i, visited, stack)
+
+        return stack
+

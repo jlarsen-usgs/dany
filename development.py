@@ -30,12 +30,22 @@ else:
 with shapefile.Reader(pp_file) as r:
     pour_point = r.shape(0)
 
+# for subbasin development
+pp2_loc = (73, 111)
+pp2_point = (
+    modelgrid.xcellcenters[pp2_loc[0], pp2_loc[1]],
+    modelgrid.ycellcenters[pp2_loc[0], pp2_loc[1]]
+)
+
+pour_points = np.array([pour_point.points[0], list(pp2_point)])
+
 fa = FlowDirections(modelgrid, dem_data)
 
 fdir = fa.flow_directions
 nidp = fa.get_nidp()
 facc = fa.flow_acculumation()
 wshed = fa.get_watershed_boundary(pour_point)
+sbsin = fa.get_subbasins(pour_points)
 
 plt.imshow(fdir, interpolation=None)
 plt.colorbar()
@@ -51,3 +61,17 @@ pc = pmv.plot_array(wshed)
 plt.plot([x,], [y,], "bo", ms=4)
 plt.colorbar(pc)
 plt.show()
+
+facc[wshed == 0] = np.nan
+pmv = flopy.plot.PlotMapView(modelgrid=modelgrid)
+pc = pmv.plot_array(facc)
+plt.scatter(pour_points.T[0], pour_points.T[1], c="k")
+plt.colorbar(pc)
+plt.show()
+
+pmv = flopy.plot.PlotMapView(modelgrid=modelgrid)
+pc = pmv.plot_array(sbsin)
+plt.scatter(pour_points.T[0], pour_points.T[1], c="k")
+plt.show()
+
+
