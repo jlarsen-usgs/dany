@@ -33,11 +33,11 @@ class FlowDirections:
         self._calculate_flowcell(slopes)
 
     @property
-    def flow_directions(self):
+    def flow_direction_array(self):
         return self._fdir.reshape(self._shape)
 
     @property
-    def flow_accumulation(self):
+    def flow_accumulation_array(self):
         return self._facc.reshape(self._shape)
 
     def _shoelace_area(self):
@@ -284,7 +284,7 @@ class FlowDirections:
         """
         nidp_array = self.get_nidp()
         flow_acc = np.ones(self._shape).ravel()
-        flow_acc_area = np.copy(self._area) # np.zeros(self._shape).ravel()
+        flow_acc_area = np.copy(self._area)
         for ix, nidp_val in enumerate(nidp_array):
             if nidp_val != 0:
                 continue
@@ -310,6 +310,7 @@ class FlowDirections:
 
         point :
 
+        **kwargs :
 
         :return:
         """
@@ -408,6 +409,70 @@ class FlowDirections:
                 point, subbasins=subbasins.ravel()
             )
         return subbasins
+
+    def delineate_streams(self, contrib_area, basin_boundary=None):
+        """
+
+        contrib_area : int, float, np.ndarray
+            contributing area threshold to binarize flow accumulation
+            into streams and landscape.
+
+        basin_boundary : np.ndarray
+
+        Returns
+        -------
+            np.ndarray : binaray numpy array of stream cell locations
+        """
+        if isinstance(contrib_area, np.ndarray):
+            contrib_area = contrib_area.ravel
+            if contrib_area.size != self._facc.size:
+                raise AssertionError(
+                    f"contrib_area array size {contrib_area.size} is not "
+                    f"compatable with flow accumulation size {self._facc.size}"
+                )
+        stream_array = np.where(self._facc >= contrib_area, 1, 0).astype(int)
+        if basin_boundary is not None:
+            stream_array[basin_boundary.ravel() == 0] = 0
+
+        return stream_array.reshape(self._shape)
+
+    def get_stream_conectivity(self, stream_array):
+        """
+
+        stream_array :
+
+        :return:
+        """
+        stream_array = stream_array.ravel()
+        strm_nodes = np.where(stream_array)[0]
+        # assign an initial reach number to stream cells
+        for i in range(1, len(strm_nodes) + 1):
+            ix = strm_nodes[i - 1]
+            stream_array[ix] = i
+
+        # create a connectivity graph.... via flow directions
+        topo = Topology()
+        for node in strm_nodes:
+            rchid = stream_array[node]
+            flow_to = self._fdir[node]
+            rchto = stream_array[flow_to]
+            topo.add_connection(rchid, rchto)
+
+        rchid_mapper = {rchid: ix + 1 for ix, rchid in enumerate(topo.sort())}
+
+        # now remap the topology tree...
+        # todo: need to reorder these based on rchid_mapper order....
+        old_map = topo.topology
+        new_map = {}
+        for rchid, rchto in old_map.items():
+            if rchto != 0:
+                new_rch = rchid_mapper[rchto]
+            else:
+                new_rch = 0
+            new_map[rchid_mapper[rchid]] = new_rch
+
+        print('break')
+        # todo: need to define iseg, ioutseg
 
 
 class Topology(object):

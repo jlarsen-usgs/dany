@@ -38,14 +38,23 @@ pp2_point = (
 )
 
 pour_points = np.array([pour_point.points[0], list(pp2_point)])
+contrib_area = 810000
 
 fa = FlowDirections(modelgrid, dem_data)
 
-fdir = fa.flow_directions
+fdir = fa.flow_direction_array
 nidp = fa.get_nidp()
 facc = fa.flow_acculumation()
 wshed = fa.get_watershed_boundary(pour_point)
 sbsin = fa.get_subbasins(pour_points)
+strm_array = fa.delineate_streams(contrib_area, wshed)
+stream_connectivity = fa.get_stream_conectivity(strm_array)
+
+strm_array = strm_array.astype(float)
+strm_array[strm_array == 0] = np.nan
+plt.imshow(wshed, interpolation=None)
+plt.imshow(strm_array, interpolation=None, cmap="cool")
+plt.show()
 
 plt.imshow(fdir, interpolation=None)
 plt.colorbar()
