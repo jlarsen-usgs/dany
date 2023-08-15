@@ -83,4 +83,5 @@ pc = pmv.plot_array(sbsin)
 plt.scatter(pour_points.T[0], pour_points.T[1], c="k")
 plt.show()
 
-
+# todo: need to create a reachdata array and connectiondata array
+# todo: add methods to fill in data that does not exist...

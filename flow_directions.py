@@ -1,5 +1,6 @@
 import numpy as np
 from collections import defaultdict
+from stream_util import Topology
 
 
 class FlowDirections:
@@ -214,7 +215,6 @@ class FlowDirections:
                         #  better mapping. flow trace does not solve for all
                         #  possible cells in the map, it only solves for
                         #  a routing distance
-                        # break
 
                     if ix not in flow_trace:
                         print('break')
@@ -410,152 +410,8 @@ class FlowDirections:
             )
         return subbasins
 
-    def delineate_streams(self, contrib_area, basin_boundary=None):
-        """
-
-        contrib_area : int, float, np.ndarray
-            contributing area threshold to binarize flow accumulation
-            into streams and landscape.
-
-        basin_boundary : np.ndarray
-
-        Returns
-        -------
-            np.ndarray : binaray numpy array of stream cell locations
-        """
-        if isinstance(contrib_area, np.ndarray):
-            contrib_area = contrib_area.ravel
-            if contrib_area.size != self._facc.size:
-                raise AssertionError(
-                    f"contrib_area array size {contrib_area.size} is not "
-                    f"compatable with flow accumulation size {self._facc.size}"
-                )
-        stream_array = np.where(self._facc >= contrib_area, 1, 0).astype(int)
-        if basin_boundary is not None:
-            stream_array[basin_boundary.ravel() == 0] = 0
-
-        return stream_array.reshape(self._shape)
-
-    def get_stream_conectivity(self, stream_array):
-        """
-
-        stream_array :
-
-        :return:
-        """
-        stream_array = stream_array.ravel()
-        strm_nodes = np.where(stream_array)[0]
-        # assign an initial reach number to stream cells
-        for i in range(1, len(strm_nodes) + 1):
-            ix = strm_nodes[i - 1]
-            stream_array[ix] = i
-
-        # create a connectivity graph.... via flow directions
-        topo = Topology()
-        for node in strm_nodes:
-            rchid = stream_array[node]
-            flow_to = self._fdir[node]
-            rchto = stream_array[flow_to]
-            topo.add_connection(rchid, rchto)
-
-        rchid_mapper = {rchid: ix + 1 for ix, rchid in enumerate(topo.sort())}
-
-        # now remap the topology tree...
-        # todo: need to reorder these based on rchid_mapper order....
-        old_map = topo.topology
-        new_map = {}
-        for rchid, rchto in old_map.items():
-            if rchto != 0:
-                new_rch = rchid_mapper[rchto]
-            else:
-                new_rch = 0
-            new_map[rchid_mapper[rchid]] = new_rch
-
-        print('break')
-        # todo: need to define iseg, ioutseg
 
 
-class Topology(object):
-    """
-    A topological sort method that uses a modified Khan algorithm to sort the
-    SFR network
 
-    Parameters
-    ----------
-    n_segments : int
-        number of sfr segments in network
 
-    """
-
-    def __init__(self, nss=None):
-        self.topology = dict()
-        self.nss = nss
-
-    def add_connection(self, iseg, ioutseg):
-        """
-        Method to add a topological connection
-
-        Parameters
-        ----------
-        iseg : int
-            current segment number
-        ioutseg : int
-            output segment number
-        """
-        self.topology[iseg] = ioutseg
-
-    def _sort_util(self, seg, visited, stack):
-        """
-        Recursive function used by topological
-        sort to perform sorting
-
-        Parameters
-        ----------
-        seg : int
-            segment number
-        visited : list
-            list of bools to indicate if location visited
-        stack : list
-            stack of sorted segment numbers
-
-        """
-        visited[seg] = True
-        if seg == 0:
-            ioutseg = 0
-        else:
-            ioutseg = self.topology[seg]
-
-        if not visited[ioutseg]:
-            self._sort_util(ioutseg, visited, stack)
-
-        if seg == 0:
-            pass
-        elif ioutseg == 0:
-            stack.append(seg)
-        else:
-            stack.insert(0, seg)
-
-    def sort(self):
-        """
-        Method to perform a topological sort
-        on the streamflow network
-
-        Returns
-        -------
-            stack: list of ordered nodes
-
-        """
-        visited = {0: False}
-        for key in self.topology:
-            visited[key] = False
-
-        stack = []
-        for i in sorted(visited):
-            if i == 0:
-                pass
-            else:
-                if not visited[i]:
-                    self._sort_util(i, visited, stack)
-
-        return stack
 
