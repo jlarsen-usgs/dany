@@ -3,13 +3,13 @@ import flopy
 
 
 class SfrBase:
-    def __init__(self, fdir, facc, shape,):
+    def __init__(self, modelgrid, fdir, facc, shape,):
+        self._modelgrid = modelgrid
         self._fdir = fdir
         self._facc = facc
         self._shape = shape
         self._stream_array = None
         self._graph = None
-
 
     def delineate_streams(self, contrib_area, basin_boundary=None):
         """
@@ -35,17 +35,16 @@ class SfrBase:
         if basin_boundary is not None:
             stream_array[basin_boundary.ravel() == 0] = 0
 
-        self._stream_array = stream_array
-        return stream_array.reshape(self._shape)
+        self._stream_array = stream_array.reshape(self._shape)
+        return self._stream_array
 
-    def get_stream_conectivity(self, stream_array):
+    def get_stream_conectivity(self, stream_array=None):
         """
 
         stream_array :
 
         :return:
         """
-        # todo: renumber stream_array....
         if stream_array is None:
             if self._stream_array is None:
                 raise AssertionError(
@@ -77,19 +76,32 @@ class SfrBase:
         new_map = {}
         for old_rch, rch_from in rchid_mapper.items():
             old_rchto = old_map[old_rch]
-            rchto = rchid_mapper[old_rchto]
+            if old_rchto == 0:
+                rchto = 0
+            else:
+                rchto = rchid_mapper[old_rchto]
             new_map[rch_from] = rchto
 
+        # renumber the stream array
+        for node in strm_nodes:
+            old = stream_array[node]
+            new = rchid_mapper[old]
+            stream_array[node] = new
+
+        self._stream_array = stream_array
         self._graph = new_map
         return new_map
 
 
 class Sfr6(SfrBase):
-    def __init__(self, faobj, **kwargs):
+    def __init__(self, modelgrid, faobj, **kwargs):
         if faobj is not None:
-            super().__init__(faobj._fdir, faobj._facc, faobj._shape)
+            super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
             self.connection_data = None
             self.package_data = None
+
+        else:
+            pass
 
     def make_connection_data(self, graph=None):
         """
@@ -123,19 +135,129 @@ class Sfr6(SfrBase):
         return connection_data
 
     def make_package_data(self, ):
+        # cellid and add complexity
         pass
 
 
-class Sfr2005:
-    def __init__(self, faobj, **kwargs):
+class Sfr2005(SfrBase):
+    def __init__(self, modelgrid, faobj, **kwargs):
         if faobj is not None:
-            super().__init__(faobj._fdir, faobj._facc, faobj._shape)
+            super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
 
-    def reach_data(self):
+    def get_stream_conectivity(self, stream_array=None):
+        """
+
+        stream_array :
+
+        :return:
+        """
+        if stream_array is None:
+            if self._stream_array is None:
+                raise AssertionError(
+                    "delineate_streams() must be run prior to mapping the "
+                    "stream connectivity or a binary array of stream cells "
+                    "must be provided"
+                )
+            stream_array = self._stream_array
+
+        # 1a) create graph of connectivity via node numbers...
+        stream_array = stream_array.ravel()
+        strm_nodes = np.where(stream_array)[0]
+
+        graph = {}
+        for node in strm_nodes:
+            node_dn = self._fdir[node]
+            if node_dn not in strm_nodes:
+                node_dn = None
+            graph[node] = node_dn
+
+        nodesup = list(graph.keys())
+        nodesdn = [i for i in graph.values() if i is not None]
+
+        # figure out where segments start then use those to map connectivity
+        segstrts = []
+        for node in nodesup:
+            if node not in nodesdn:
+                segstrts.append(node)
+
+        for node in nodesdn:
+            x = np.where(nodesdn == node)[0]
+            if len(x) > 1:
+                if node not in segstrts:
+                    segstrts.append(node)
+
+        # node, seg, rch --->??
+        # segmap --->?
+        nd_seg_rch = []
+        seg_graph = {}
+        # todo: assign a seg number to segstrts... this should be a dict...
+        seg = 0
+        for node in segstrts:
+            rch = 1
+            seg += 1
+            while True:
+                nd_seg_rch.append((node, seg, rch))
+                rch += 1
+
+                dnnode = graph[node]
+                if dnnode in segstrts or dnnode is None:
+                    if dnnode is not None:
+                        seg_graph[seg] = seg + 1
+                    else:
+                        seg_graph[seg] = 0
+                    break
+
+                node = dnnode
+
+        print('break')
+
+        # todo: create a graph of node numbers and then find individual segments
+        #  after set the segment numbers and then number the reaches....
+        #  create a reachno array and segno array....
+
+
+
+        # 1b) find headwater nodes and trace downstream...
+
+    def reach_data(self, **kwargs):
+        # start with KRCH IRCH JRCH ISEG IREACH RCHLEN [] and add complexity
+        # todo: need connectivity graph to get rchlen...
+        i_idx, j_idx = np.where(self._stream_array != 0)
+        xcenters = self._modelgrid.xcellcenters
+        ycenters = self._modelgrid.ycellcenters
+
+        basic_rec = []
+        for ix, i in enumerate(i_idx):
+            krch = 0
+            irch = i
+            jrch = j_idx[ix]
+            iseg = self._stream_array[irch, jrch]
+            dwn = self._graph[iseg]
+            if dwn != 0:
+                dwn_irch, dwn_jrch = np.where(self._stream_array == dwn)
+
+                a2 = (xcenters[irch, jrch] - xcenters[dwn_irch, dwn_jrch]) ** 2
+                b2 = (ycenters[irch, jrch] - ycenters[dwn_irch, dwn_jrch]) ** 2
+                dist = np.sqrt(a2 + b2)
+                rchlen = dist * 1.5
+            else:
+                rchlen = 1.5 * self._modelgrid.delr[jrch]
+
+            basic_rec.append((krch, irch, jrch))
+
+
+
         pass
 
     def segment_data(self):
         pass
+
+
+class PrmsStrms(SfrBase):
+
+    def __init__(self):
+        super().__init__()
+
 
 
 class Topology(object):

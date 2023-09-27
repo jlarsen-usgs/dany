@@ -5,6 +5,7 @@ import os
 import numpy as np
 from flopy.utils import Raster
 from flow_directions import FlowDirections
+from stream_util import Sfr6, Sfr2005
 from gsflow.builder import GenerateFishnet
 import shapefile
 
@@ -47,9 +48,12 @@ nidp = fa.get_nidp()
 facc = fa.flow_acculumation()
 wshed = fa.get_watershed_boundary(pour_point)
 sbsin = fa.get_subbasins(pour_points)
-strm_array = fa.delineate_streams(contrib_area, wshed)
-stream_connectivity = fa.get_stream_conectivity(strm_array)
 
+strms = Sfr2005(modelgrid, fa)
+strm_array = strms.delineate_streams(contrib_area, wshed)
+stream_connectivity = strms.get_stream_conectivity(strm_array)
+
+strm_array = strms._stream_array.reshape(modelgrid.shape)[0]
 strm_array = strm_array.astype(float)
 strm_array[strm_array == 0] = np.nan
 plt.imshow(wshed, interpolation=None)

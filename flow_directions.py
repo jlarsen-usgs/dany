@@ -21,8 +21,14 @@ class FlowDirections:
         self._fneighbors = None
         # self._dem = dem.ravel()
         self._dem = np.array(list(dem.ravel()) + [1e+10])
-        self._xcenters = np.array(list(modelgrid.xcellcenters.ravel()) + [np.mean(modelgrid.xcellcenters) + 0.1])
-        self._ycenters = np.array(list(modelgrid.ycellcenters.ravel()) + [np.mean(modelgrid.ycellcenters) + 0.1])
+        self._xcenters = np.array(
+            list(modelgrid.xcellcenters.ravel()) +
+            [np.mean(modelgrid.xcellcenters) + 0.1]
+        )
+        self._ycenters = np.array(
+            list(modelgrid.ycellcenters.ravel()) +
+            [np.mean(modelgrid.ycellcenters) + 0.1]
+        )
 
         self._fdir = np.full(self._dem.size - 1, -1)
         self._fdir_r = None
