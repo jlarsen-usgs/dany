@@ -175,49 +175,61 @@ class Sfr2005(SfrBase):
         nodesdn = [i for i in graph.values() if i is not None]
 
         # figure out where segments start then use those to map connectivity
-        segstrts = []
+        segstrts = {}
+        iseg = 1
         for node in nodesup:
             if node not in nodesdn:
-                segstrts.append(node)
+                segstrts[node] = iseg
+                iseg += 1
 
         for node in nodesdn:
             x = np.where(nodesdn == node)[0]
             if len(x) > 1:
                 if node not in segstrts:
-                    segstrts.append(node)
+                    segstrts[node] = iseg
+                    iseg += 1
 
         # node, seg, rch --->??
         # segmap --->?
         nd_seg_rch = []
         seg_graph = {}
-        # todo: assign a seg number to segstrts... this should be a dict...
-        seg = 0
-        for node in segstrts:
+        for node, seg in segstrts.items():
             rch = 1
-            seg += 1
             while True:
-                nd_seg_rch.append((node, seg, rch))
+                nd_seg_rch.append([node, seg, rch])
                 rch += 1
 
                 dnnode = graph[node]
                 if dnnode in segstrts or dnnode is None:
                     if dnnode is not None:
-                        seg_graph[seg] = seg + 1
+                        seg_graph[seg] = segstrts[dnnode]
                     else:
                         seg_graph[seg] = 0
                     break
 
                 node = dnnode
 
-        print('break')
+        topo = Topology()
+        for iseg, ioutseg in seg_graph.items():
+            topo.add_connection(iseg, ioutseg)
 
-        # todo: create a graph of node numbers and then find individual segments
-        #  after set the segment numbers and then number the reaches....
-        #  create a reachno array and segno array....
+        segid_mapper = {segid: ix + 1 for ix, segid in enumerate(topo.sort())}
+
+        # remap_node_seg_reach
+        for i in range(len(nd_seg_rch)):
+            oldseg = nd_seg_rch[i][1]
+            nd_seg_rch[i][1] = segid_mapper[oldseg]
+
+        # todo: update stream_array. Remove other code that maps node to reachid
+
+        # remap seg_graph
+        seg_graph = {
+            segid_mapper[iseg]: segid_mapper[ioutseg]
+            for iseg, ioutseg in segid_mapper.items()
+        }
 
 
 
-        # 1b) find headwater nodes and trace downstream...
 
     def reach_data(self, **kwargs):
         # start with KRCH IRCH JRCH ISEG IREACH RCHLEN [] and add complexity

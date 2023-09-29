@@ -1,0 +1,16 @@
+channels:
+  - conda-forge
+dependencies:
+  - pip
+  - numpy
+  - matplotlib
+  - pandas
+  - scipy
+  - rasterio
+  - rasterstats
+  - shapely
+  - pyshp
+
+  - pip:
+      - git+https://github.com/modflowpy/flopy@develop
+      - git+https://github.com/pygsflow/pygsflow@develop
