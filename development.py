@@ -52,7 +52,8 @@ sbsin = fa.get_subbasins(pour_points)
 strms = Sfr2005(modelgrid, fa)
 strm_array = strms.delineate_streams(contrib_area, wshed)
 stream_connectivity = strms.get_stream_conectivity(strm_array)
-
+reach_data = strms.reach_data()
+print('break')
 strm_array = strms._stream_array.reshape(modelgrid.shape)[0]
 strm_array = strm_array.astype(float)
 strm_array[strm_array == 0] = np.nan

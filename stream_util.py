@@ -2,7 +2,7 @@ import numpy as np
 import flopy
 
 
-class SfrBase:
+class StreamBase:
     def __init__(self, modelgrid, fdir, facc, shape,):
         self._modelgrid = modelgrid
         self._fdir = fdir
@@ -38,7 +38,7 @@ class SfrBase:
         self._stream_array = stream_array.reshape(self._shape)
         return self._stream_array
 
-    def get_stream_conectivity(self, stream_array=None):
+    def _mf6_stream_connectivity(self, stream_array=None):
         """
 
         stream_array :
@@ -92,59 +92,7 @@ class SfrBase:
         self._graph = new_map
         return new_map
 
-
-class Sfr6(SfrBase):
-    def __init__(self, modelgrid, faobj, **kwargs):
-        if faobj is not None:
-            super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
-            self.connection_data = None
-            self.package_data = None
-
-        else:
-            pass
-
-    def make_connection_data(self, graph=None):
-        """
-        Method to create the modflow 6 connection data block from a graph
-        of reach connectivity
-
-        graph : dict, None
-            graph of {reach from: reach to}
-
-        """
-        if graph is None:
-            if self._graph is None:
-                raise AssertionError(
-                    "get_stream_connectivity() must be run or a graph of "
-                    "stream connectivity must be provided prior to creating"
-                    "the connection data array"
-                )
-
-            graph = self._graph
-
-        conn_dict = {i: [] for i in sorted(graph.keys())}
-        for reach, reach_to in graph.items():
-            if reach_to != 0:
-                conn_dict[reach].append(-1 * reach_to)
-                conn_dict[reach_to].insert(0, reach)
-
-        connection_data = []
-        for k, v in conn_dict.items():
-            connection_data.append((k,) + tuple(v))
-
-        return connection_data
-
-    def make_package_data(self, ):
-        # cellid and add complexity
-        pass
-
-
-class Sfr2005(SfrBase):
-    def __init__(self, modelgrid, faobj, **kwargs):
-        if faobj is not None:
-            super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
-
-    def get_stream_conectivity(self, stream_array=None):
+    def _mf2005_stream_connectivity(self, stream_array=None):
         """
 
         stream_array :
@@ -197,6 +145,7 @@ class Sfr2005(SfrBase):
             rch = 1
             while True:
                 nd_seg_rch.append([node, seg, rch])
+                stream_array[node] = seg
                 rch += 1
 
                 dnnode = graph[node]
@@ -214,61 +163,198 @@ class Sfr2005(SfrBase):
             topo.add_connection(iseg, ioutseg)
 
         segid_mapper = {segid: ix + 1 for ix, segid in enumerate(topo.sort())}
+        segid_mapper[0] = 0
 
-        # remap_node_seg_reach
+        # remap_node_seg_reach (move to reach data)
         for i in range(len(nd_seg_rch)):
             oldseg = nd_seg_rch[i][1]
             nd_seg_rch[i][1] = segid_mapper[oldseg]
 
-        # todo: update stream_array. Remove other code that maps node to reachid
-
         # remap seg_graph
         seg_graph = {
             segid_mapper[iseg]: segid_mapper[ioutseg]
-            for iseg, ioutseg in segid_mapper.items()
+            for iseg, ioutseg in seg_graph.items()
         }
 
+        seg_array = np.zeros((stream_array.shape), dtype=int)
+        for iseg, new_seg in segid_mapper.items():
+            idx = np.where(
+                stream_array == iseg,
+            )[0]
+            seg_array[idx] = new_seg
+
+        self._stream_array = seg_array.reshape(
+            (self._modelgrid.nrow, self._modelgrid.ncol)
+        )
+        self._graph = graph
+        self._seg_graph = seg_graph
+        self._node_seg_rch = np.array(nd_seg_rch)
+        return seg_graph
+
+
+class Sfr6(StreamBase):
+    def __init__(self, modelgrid, faobj, **kwargs):
+        if faobj is not None:
+            super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
+            self.connection_data = None
+            self.package_data = None
+
+        else:
+            pass
+
+    def make_connection_data(self, graph=None):
+        """
+        Method to create the modflow 6 connection data block from a graph
+        of reach connectivity
+
+        graph : dict, None
+            graph of {reach from: reach to}
+
+        """
+        if graph is None:
+            if self._graph is None:
+                if self._stream_array is None:
+                    raise AssertionError(
+                        "get_stream_connectivity() must be run or a graph of "
+                        "stream connectivity must be provided prior to creating"
+                        "the connection data array"
+                    )
+                else:
+                    self._mf6_stream_connectivity()
+
+            graph = self._graph
+
+        conn_dict = {i: [] for i in sorted(graph.keys())}
+        for reach, reach_to in graph.items():
+            if reach_to != 0:
+                conn_dict[reach].append(-1 * reach_to)
+                conn_dict[reach_to].insert(0, reach)
+
+        connection_data = []
+        for k, v in conn_dict.items():
+            connection_data.append((k,) + tuple(v))
+
+        return connection_data
 
 
 
-    def reach_data(self, **kwargs):
+    def make_package_data(self, stream_array=None, **kwargs):
+        # cellid and add complexity
+        pass
+
+
+class Sfr2005(StreamBase):
+    def __init__(self, modelgrid, faobj, **kwargs):
+        if faobj is not None:
+            super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
+
+        self._node_seg_rch = None
+        self._seg_graph = None
+
+    def get_stream_connectivity(self, stream_array=None):
+        """
+
+        :param stream_array:
+        :return:
+        """
+        return self._mf2005_stream_connectivity(stream_array=stream_array)
+
+    def reach_data(self, stream_array=None, **kwargs):
         # start with KRCH IRCH JRCH ISEG IREACH RCHLEN [] and add complexity
-        # todo: need connectivity graph to get rchlen...
-        i_idx, j_idx = np.where(self._stream_array != 0)
-        xcenters = self._modelgrid.xcellcenters
-        ycenters = self._modelgrid.ycellcenters
+        if stream_array is None:
+            if self._stream_array is None:
+                raise AssertionError(
+                    "delineate_streams() must be run prior to mapping the "
+                    "stream connectivity or a binary array of stream cells "
+                    "must be provided"
+                )
+            stream_array = self._stream_array
+
+        if self._seg_graph is None:
+            self._mf2005_stream_connectivity(stream_array)
 
         basic_rec = []
-        for ix, i in enumerate(i_idx):
-            krch = 0
-            irch = i
-            jrch = j_idx[ix]
-            iseg = self._stream_array[irch, jrch]
-            dwn = self._graph[iseg]
-            if dwn != 0:
-                dwn_irch, dwn_jrch = np.where(self._stream_array == dwn)
+        xcenters = self._modelgrid.xcellcenters
+        ycenters = self._modelgrid.ycellcenters
+        for iseg, outseg in sorted(self._seg_graph.items()):
+            if iseg != 0:
+                idx = np.where(self._node_seg_rch[:, 1] == iseg)[0]
+                nd_seg_rch = self._node_seg_rch[idx]
+                numrch = len(nd_seg_rch) - 1
+                for ix, rec in enumerate(nd_seg_rch):
+                    if ix != numrch:
+                        nd_dn = nd_seg_rch[ix + 1][0]
+                    else:
+                        if outseg != 0:
+                            idx = np.where(
+                                self._node_seg_rch[:, 1] == outseg
+                            )[0][0]
+                            nd_dn = self._node_seg_rch[idx][0]
+                        else:
+                            nd_dn = None
 
-                a2 = (xcenters[irch, jrch] - xcenters[dwn_irch, dwn_jrch]) ** 2
-                b2 = (ycenters[irch, jrch] - ycenters[dwn_irch, dwn_jrch]) ** 2
-                dist = np.sqrt(a2 + b2)
-                rchlen = dist * 1.5
-            else:
-                rchlen = 1.5 * self._modelgrid.delr[jrch]
+                    _, irch, jrch = self._modelgrid.get_lrc(int(rec[0]))[0]
+                    if nd_dn is not None:
+                        _, irch_dn, jrch_dn = self._modelgrid.get_lrc(int(nd_dn))[0]
+                        a2 = (
+                            xcenters[irch, jrch] - xcenters[irch_dn, jrch_dn]
+                        ) ** 2
+                        b2 = (
+                            ycenters[irch, jrch] - ycenters[irch_dn, jrch_dn]
+                        ) ** 2
+                        dist = np.sqrt(a2 + b2)
+                        rchlen = dist * 1.5
+                    else:
+                        rchlen = 1.5 * np.mean(
+                            [self._modelgrid.delr[jrch], self._modelgrid.delc[irch]]
+                        )
 
-            basic_rec.append((krch, irch, jrch))
+                    record = (0, irch, jrch, iseg, rec[-1], rchlen)
+                    basic_rec.append(record)
 
-
-
-        pass
+        # todo: should this get thrown into a flopy recarray?????
+        #   think of geospatial methods to fill this data
+        return basic_rec
 
     def segment_data(self):
         pass
 
 
-class PrmsStrms(SfrBase):
+class PrmsStreams(StreamBase):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, modelgrid, faobj, **kwargs):
+        if faobj is not None:
+            super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
+
+    def get_stream_connectivity(self, stream_array=None, group_segments=False):
+        """
+        Method to calculate stream connectivity for PRMS streams
+
+        Parameters
+        ----------
+        stream_array:
+        group_segments : bool
+            boolean flag that groups stream cells into segments based on
+            stream confluences. This produces segments in the MF2005 based
+            framework. Default is False and each cell is treated as an
+            individual segment/reach as in the MF6 framework.
+
+        Returns
+        -------
+        """
+        if not group_segments:
+            return self._mf6_stream_connectivity(stream_array=stream_array)
+        else:
+            return self._mf2005_stream_connectivity(stream_array=stream_array)
+
+    def get_cascades(self, stream_array=None):
+        """
+        Method to get PRMS/pyWatershed cascades
+
+        :param stream_array:
+        :return:
+        """
+
 
 
 
