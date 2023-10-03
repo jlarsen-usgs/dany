@@ -3,13 +3,48 @@ import flopy
 
 
 class StreamBase:
-    def __init__(self, modelgrid, fdir, facc, shape,):
+    """
+    Base class for stream delineation and building model features
+
+    """
+    def __init__(self, modelgrid, fdir, facc, shape):
         self._modelgrid = modelgrid
         self._fdir = fdir
         self._facc = facc
         self._shape = shape
         self._stream_array = None
         self._graph = None
+
+        self._shape = self._modelgrid.shape[1:]
+        self._nnodes = self._modelgrid.ncpl
+        if self._modelgrid.grid_type == "unstructured":
+            self._nnodes = self._modelgrid.nnodes
+            self._shape = (self._nnodes,)
+
+    @property
+    def stream_array(self):
+        if self._stream_array is None:
+            raise AssertionError(
+                "delineate_streams() or set_stream_array() must be run prior "
+                "to getting a stream array"
+            )
+
+        return self._stream_array.reshape(self._shape)
+
+    def set_stream_array(self, stream_array):
+        """
+        Method to set a custom stream array
+
+        Parameters
+        ----------
+        :param stream_array:
+
+        """
+        # need to create a trap for unstrucutred grids
+        if stream_array.size != self._nnodes:
+            raise ValueError(f"Array size is incompatible with modelgrid size {self._nnodes}")
+
+        self._stream_array = stream_array.reshape(self._shape)
 
     def delineate_streams(self, contrib_area, basin_boundary=None):
         """
@@ -193,6 +228,9 @@ class StreamBase:
 
 
 class Sfr6(StreamBase):
+    """
+
+    """
     def __init__(self, modelgrid, faobj, **kwargs):
         if faobj is not None:
             super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
@@ -236,11 +274,11 @@ class Sfr6(StreamBase):
 
         return connection_data
 
-
-
     def make_package_data(self, stream_array=None, **kwargs):
         # cellid and add complexity
         pass
+
+
 
 
 class Sfr2005(StreamBase):
@@ -347,15 +385,63 @@ class PrmsStreams(StreamBase):
         else:
             return self._mf2005_stream_connectivity(stream_array=stream_array)
 
-    def get_cascades(self, stream_array=None):
+    def get_cascades(
+        self,
+        stream_array=None,
+        basin_boundary=None,
+        many2many=False
+    ):
         """
         Method to get PRMS/pyWatershed cascades
 
         :param stream_array:
         :return:
         """
+        # todo: need to grab the "threshold" from flow_directions/accumulation,
+        #  should this be stored internally in facc?
+        if not many2many:
+            hru_up_id, hru_down_id, hru_pct_up = \
+                self._build_many_to_one_cascades(basin_boundary=basin_boundary)
+        else:
+            pass
 
+        # todo: build hru_strmseg_down_id
 
+    def _build_many_to_one_cascades(self, basin_boundary=None):
+        """
+
+        :return:
+        """
+        fdir = self._fdir.copy().ravel()
+        if basin_boundary is not None:
+            fdir[basin_boundary.ravel() == 0] = 0
+
+        hru_up_id = []
+        hru_down_id = []
+        hru_pct_up = []
+        for hru_down in fdir:
+            if hru_down == 0:
+                continue
+
+            idxs = np.where(fdir == hru_down)[0]
+            if len(idxs) == 0:
+                continue
+
+            if fdir[hru_down] == 0:
+                # trap for outlets, need to set hru_up and hru_dn to same val
+                idxs = [hru_down]
+
+            hru_up = list(idxs)
+            hru_down = [hru_down,] * len(hru_up)
+            hru_pct = [1.0,] * len(hru_up)
+
+            hru_up_id.extend(hru_up)
+            hru_down_id.extend(hru_down)
+            hru_pct_up.extend(hru_down)
+
+        return hru_up_id, hru_down_id, hru_pct_up
+
+        # get number of input drainage paths to cacluate cascades
 
 
 class Topology(object):
