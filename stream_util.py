@@ -29,7 +29,7 @@ class StreamBase:
                 "to getting a stream array"
             )
 
-        return self._stream_array.reshape(self._shape)
+        return self._stream_array.copy().reshape(self._shape)
 
     def set_stream_array(self, stream_array):
         """
@@ -399,13 +399,31 @@ class PrmsStreams(StreamBase):
         """
         # todo: need to grab the "threshold" from flow_directions/accumulation,
         #  should this be stored internally in facc?
+        if stream_array is None:
+            stream_array = self.stream_array.ravel()
+
         if not many2many:
             hru_up_id, hru_down_id, hru_pct_up = \
                 self._build_many_to_one_cascades(basin_boundary=basin_boundary)
         else:
-            pass
+            self._build_many_to_many_cascades(
+                basin_boundary=basin_boundary, threshold=1e-06
+            )
 
-        # todo: build hru_strmseg_down_id
+        hru_up_id = np.array(hru_up_id, dtype=int)
+        hru_down_id = np.array(hru_down_id, dtype=int)
+        hru_pct_up = np.array(hru_pct_up)
+
+        hru_strmseg_down_id = []
+        for ix, hru_id in enumerate(hru_down_id):
+            if stream_array[hru_id] == 0:
+                hru_strmseg_down_id.append(0)
+            else:
+                hru_strmseg_down_id.append(stream_array[hru_id])
+
+        hru_down_id += 1
+        hru_up_id += 1
+        return hru_up_id, hru_down_id, hru_pct_up, hru_strmseg_down_id
 
     def _build_many_to_one_cascades(self, basin_boundary=None):
         """
@@ -437,11 +455,28 @@ class PrmsStreams(StreamBase):
 
             hru_up_id.extend(hru_up)
             hru_down_id.extend(hru_down)
-            hru_pct_up.extend(hru_down)
+            hru_pct_up.extend(hru_pct)
 
         return hru_up_id, hru_down_id, hru_pct_up
 
-        # get number of input drainage paths to cacluate cascades
+    def _build_many_to_many_cascades(
+        self,
+        basin_boundary=None,
+        threshold=1e-06
+    ):
+        """
+
+        :param basin_boundary:
+        :param threshold:
+        :return:
+        """
+        fdir = self._fdir.copy().ravel()
+        if basin_boundary is not None:
+            fdir[basin_boundary.ravel() == 0] = 0
+
+
+
+        return
 
 
 class Topology(object):
