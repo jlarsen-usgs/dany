@@ -62,6 +62,44 @@ def _sink_fill(z, w, eps, neighbors):
     return modified, w
 
 
+def priority_flood(modelgrid, dem, seed=0):
+    """
+    Priority flood method
+
+    :return:
+    """
+    import heapq
+    dem = dem.ravel()
+    newdem = dem.copy()
+    newdem[seed] = dem[seed]
+
+    pit = []
+    open = []
+    heapq.heappush(open, (dem[seed], seed))
+    closed = np.zeros(dem.size, dtype=bool)
+    closed[seed] = True
+    neighbors = modelgrid.neighbors(method="queen", as_nodes=True)
+
+    while open or pit:
+        if pit:
+            c = pit.pop()
+        else:
+            elev, c = heapq.heappop(open)
+
+        neighs = neighbors[c]
+        for n in neighs:
+            if closed[n]:
+                continue
+            closed[n] = True
+            if newdem[n] <= dem[c]:
+                newdem[n] = dem[c]
+                pit.append(n)
+            else:
+                heapq.heappush(open, (dem[n], n))
+
+    return newdem
+
+
 
 nrow = 5
 ncol = 4
@@ -69,13 +107,13 @@ dem = np.array([[100, 90, 95, 100],
                 [91, 45, 46, 89],
                 [90, 41, 40, 90],
                 [85, 70, 88, 89],
-                [69, 72, 84, 85]])
+                [69.1, 72, 84, 85]])
 seed = 16
 
-nrow = 20
-ncol = 20
-dem = np.abs(np.random.random(nrow*ncol) * 100)
-seed = (nrow * (ncol - 1)) + np.argmin(dem[nrow*(ncol - 1):])
+# nrow = 20
+# ncol = 20
+# dem = np.abs(np.random.random(nrow*ncol) * 100)
+# seed = (nrow * (ncol - 1)) + np.argmin(dem[nrow*(ncol - 1):])
 
 idomain = np.ones((1, nrow, ncol), dtype=int)
 botm = np.zeros((1, nrow, ncol))
@@ -96,7 +134,10 @@ grid = flopy.discretization.StructuredGrid(
 
 pro = cProfile.Profile()
 pro.enable()
-wf = fill_sinks(grid, dem, eps=0.1, seed=seed)
+
+wf = priority_flood(grid, dem, seed=seed)
+
+# wf = fill_sinks(grid, dem, eps=0.1, seed=seed)
 pro.disable()
 stats = pstats.Stats(pro)
 stats.print_stats()
