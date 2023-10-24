@@ -62,9 +62,11 @@ def _sink_fill(z, w, eps, neighbors):
     return modified, w
 
 
-def priority_flood(modelgrid, dem, seed=0):
+def priority_flood(modelgrid, dem, seed=0, eps=1e-06):
     """
-    Priority flood method
+    Priority flood method, Barnes, Lehman, and Mulla sink fill method.
+
+    Fast eps-improved priority flood method
 
     :return:
     """
@@ -79,10 +81,11 @@ def priority_flood(modelgrid, dem, seed=0):
     closed = np.zeros(dem.size, dtype=bool)
     closed[seed] = True
     neighbors = modelgrid.neighbors(method="queen", as_nodes=True)
+    # neighbors2 = modelgrid.neighbors(method="rook", as_nodes=True)
 
     while open or pit:
         if pit:
-            c = pit.pop()
+            c = pit.pop(0)
         else:
             elev, c = heapq.heappop(open)
 
@@ -91,11 +94,11 @@ def priority_flood(modelgrid, dem, seed=0):
             if closed[n]:
                 continue
             closed[n] = True
-            if newdem[n] <= dem[c]:
-                newdem[n] = dem[c]
+            if newdem[n] <= newdem[c]:
+                newdem[n] = newdem[c] + eps
                 pit.append(n)
             else:
-                heapq.heappush(open, (dem[n], n))
+                heapq.heappush(open, (newdem[n], n))
 
     return newdem
 
@@ -110,10 +113,10 @@ dem = np.array([[100, 90, 95, 100],
                 [69.1, 72, 84, 85]])
 seed = 16
 
-# nrow = 20
-# ncol = 20
-# dem = np.abs(np.random.random(nrow*ncol) * 100)
-# seed = (nrow * (ncol - 1)) + np.argmin(dem[nrow*(ncol - 1):])
+nrow = 20
+ncol = 20
+dem = np.abs(np.random.random(nrow*ncol) * 100)
+seed = (nrow * (ncol - 1)) + np.argmin(dem[nrow*(ncol - 1):])
 
 idomain = np.ones((1, nrow, ncol), dtype=int)
 botm = np.zeros((1, nrow, ncol))
