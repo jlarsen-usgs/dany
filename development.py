@@ -4,6 +4,7 @@ import os
 
 import numpy as np
 from flopy.utils import Raster
+from dem_conditioning import fill_sinks
 from flow_directions import FlowDirections
 from stream_util import Sfr6, Sfr2005
 from gsflow.builder import GenerateFishnet
@@ -41,7 +42,9 @@ pp2_point = (
 pour_points = np.array([pour_point.points[0], list(pp2_point)])
 contrib_area = 810000
 
-fa = FlowDirections(modelgrid, dem_data)
+wf = fill_sinks(modelgrid, dem_data)
+
+fa = FlowDirections(modelgrid, wf)
 
 fdir = fa.flow_direction_array
 nidp = fa.get_nidp()
@@ -51,7 +54,7 @@ sbsin = fa.get_subbasins(pour_points)
 
 strms = Sfr2005(modelgrid, fa)
 strm_array = strms.delineate_streams(contrib_area, wshed)
-stream_connectivity = strms.get_stream_conectivity(strm_array)
+stream_connectivity = strms.get_stream_connectivity(strm_array)
 reach_data = strms.reach_data()
 print('break')
 strm_array = strms._stream_array.reshape(modelgrid.shape)[0]

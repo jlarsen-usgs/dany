@@ -1,10 +1,50 @@
-import random
-import cProfile, pstats
 import numpy as np
-import flopy
+from collections import defaultdict
 
 
-def fill_sinks(modelgrid, dem, eps=1e-04, seed=0):
+def sink_fill(modelgrid, dem, eps=1e-06, method="priority"):
+    """
+    Method to fill digital sinks within a DEM. Default is the eps-improved
+    priority-flood method. This method is compatible with d-n (any number of
+    neighbor) grids, such as vertex and unstructured grids. Grid cell neighbors
+    are calculated using a queen-neighbor method (shared vertex).
+
+    Parameters
+    ----------
+    modelgrid : flopy.discetization.Grid object
+    dem : np.ndarray
+        numpy array of digital elevations
+    eps : float
+        epsilon fill value to remove digital flat areas.
+    method : str
+        sink fill method. "priority" runs the improved priority-flood algorithm
+        described in Barnes and others (2014) which is an efficient single
+        pass filling method epsilon filling method in this implementation.
+        "complete" also runs the improved priority-flood algorithm, however
+        does not use epsilon filling to correct digitally flat areas of the
+        DEM. "drain" uses the direct implementation of Planchon and Darboux,
+        2001 to perform epsilon filling. This method is iterative and is
+        slower than the priority flood method. It is included however for it's
+        robustness.
+
+    Returns
+    -------
+        np.array : filled DEM elevations
+    """
+    edge_nodes = identify_edge_nodes(modelgrid)
+    if method.lower() in ("priority", "complete"):
+        if method.lower() == "complete":
+            eps = 0.
+
+        filled_dem = priority_flood(modelgrid, dem, eps, seed=edge_nodes)
+
+    else:
+        filled_dem = flood_and_drain_fill(modelgrid, dem, eps, seed=edge_nodes)
+
+    return filled_dem
+
+
+def flood_and_drain_fill(modelgrid, dem, eps=1e-06, seed=0):
     """
     Iterative sink fill method based on Planchon and Darboux, 2001:  "A fast
     simple and versitile algorithm to fill the depressions of digital
@@ -17,8 +57,10 @@ def fill_sinks(modelgrid, dem, eps=1e-04, seed=0):
         digital elevation array
     eps : float
         small fill value to raise cells for digital drainage
-    seed : int
-        pour point location for seeding the fill operation
+    seed : list, int
+        pour point or grid edge cell locations (more robust) for seeding the
+        fill operation
+
     Returns
     -------
         np.ndarray: filled dem
@@ -33,14 +75,14 @@ def fill_sinks(modelgrid, dem, eps=1e-04, seed=0):
     niter = 0
     while modified:
         niter += 1
-        modified, wf = _sink_fill(dem, wf, eps, neighbors)
+        modified, wf = _flood_and_drain_fill(dem, wf, eps, neighbors)
         print(niter)
 
     return wf
 
 
 # potentially implement network analysis method to speed this process up...
-def _sink_fill(dem, wf, eps, neighbors):
+def _flood_and_drain_fill(dem, wf, eps, neighbors):
     """
     Method based on Planchon and Darboux, 2001:  "A fast simple and versitile
     algorithm to fill the depressions of digital elevation models"
@@ -84,7 +126,7 @@ def _sink_fill(dem, wf, eps, neighbors):
     return modified, wf
 
 
-def priority_flood(modelgrid, dem, seed=0, eps=1e-06):
+def priority_flood(modelgrid, dem, eps=1e-06, seed=0):
     """
     Priority flood method for sink fill operations based on Barnes and others,
     2014, "Priority-flood: An optimal depression-filling and watershed-labeling
@@ -97,7 +139,9 @@ def priority_flood(modelgrid, dem, seed=0, eps=1e-06):
     modelgrid : flopy.discretization.Grid object
     dem : np.ndarray
         numpy array of DEM elevations
-    seed : cell number for beginning the flood fill (pour point)
+    seed : list, int
+        cell number(s) for beginning the flood fill (pour point) or grid
+        edges (more robust)
     eps : float
         epsilon difference for filled cells. This raises the cell by a small
         value compared to neighbors, this can be set to zero for a flat fill.
@@ -110,11 +154,17 @@ def priority_flood(modelgrid, dem, seed=0, eps=1e-06):
     import heapq
     dem = dem.ravel()
     newdem = dem.copy()
+
+    if isinstance(seed, int):
+        seed = [seed]
+
     newdem[seed] = dem[seed]
 
     pit = []
     open = []
-    heapq.heappush(open, (dem[seed], seed))
+    for n in seed:
+        heapq.heappush(open, (dem[n], n))
+
     closed = np.zeros(dem.size, dtype=bool)
     closed[seed] = True
     neighbors = modelgrid.neighbors(method="queen", as_nodes=True)
@@ -139,68 +189,104 @@ def priority_flood(modelgrid, dem, seed=0, eps=1e-06):
     return newdem
 
 
-# todo: test on actual watersheds with divides. Seed method will might
-#   cause failures as edge nodes were the preferred seeds in the literature.
-#   We need to overcome that because we are not able to easily identify edges
-#   in unstructured and vertex grids
-#   we could use the number of vertexes vs. the number of neighbors to determine
-#   if a cell is an edge cell...
-
-
 def identify_edge_nodes(modelgrid):
-    pass
+    """
+    Method to identify model grid "edge" nodes. This method adapts the
+    rook neighbor calculation to identify cell edges with no neighbor
+    connection and then creates a set of those nodes.
+
+    Parameters
+    ----------
+    modelgrid : flopy.discretization.Grid object
+
+    Returns
+    -------
+        list : list of node numbers
+    """
+    geoms = []
+    node_nums = []
+    for node_num, poly in enumerate(modelgrid.iverts):
+        if poly[0] == poly[-1]:
+            poly = poly[:-1]
+        for v in range(len(poly)):
+            geoms.append(tuple(sorted([poly[v - 1], poly[v]])))
+        node_nums += [node_num] * len(poly)
+
+    edges_and_nodes = defaultdict(set)
+    for i, item in enumerate(geoms):
+        edges_and_nodes[item].add(node_nums[i])
+
+    edge_nodes = set()
+    for nodes in edges_and_nodes.values():
+        if len(nodes) == 1:
+            edge_nodes = edge_nodes | nodes
+
+    return list(sorted(edge_nodes))
 
 
+if __name__ == "__main__":
+    import cProfile, pstats
+    import flopy
+    import matplotlib.pyplot as plt
 
-nrow = 5
-ncol = 4
-dem = np.array([[100, 90, 95, 100],
-                [91, 45, 46, 89],
-                [90, 41, 40, 90],
-                [85, 70, 88, 89],
-                [69.1, 72, 84, 85]])
-seed = 16
-
-nrow = 20
-ncol = 20
-dem = np.abs(np.random.random(nrow*ncol) * 100)
-seed = (nrow * (ncol - 1)) + np.argmin(dem[nrow*(ncol - 1):])
-
-idomain = np.ones((1, nrow, ncol), dtype=int)
-botm = np.zeros((1, nrow, ncol))
-delc = np.ones((nrow,)) * 500
-delr = np.ones((ncol,)) * 500
+    nrow = 5
+    ncol = 4
+    dem = np.array([[100, 90, 95, 100],
+                    [91, 45, 46, 89],
+                    [90, 41, 40, 90],
+                    [85, 70, 88, 89],
+                    [69.1, 72, 84, 85]])
 
 
-grid = flopy.discretization.StructuredGrid(
-    top=dem,
-    botm=botm,
-    delc=delc,
-    delr=delr,
-    idomain=idomain,
-    nlay=1,
-    nrow=nrow,
-    ncol=ncol
-)
+    oseed = 16
 
-pro = cProfile.Profile()
-pro.enable()
+    nrow = 1000
+    ncol = 1000
+    dem = np.abs(np.random.random(nrow*ncol) * 100)
+    # seed = (nrow * (ncol - 1)) + np.argmin(dem[nrow*(ncol - 1):])
 
-wf = priority_flood(grid, dem, seed=seed)
+    idomain = np.ones((1, nrow, ncol), dtype=int)
+    botm = np.zeros((1, nrow, ncol))
+    delc = np.ones((nrow,)) * 500
+    delr = np.ones((ncol,)) * 500
 
-# wf = fill_sinks(grid, dem, eps=0.1, seed=seed)
-pro.disable()
-stats = pstats.Stats(pro)
-stats.print_stats()
-wf = wf.reshape((nrow, ncol))
 
-import matplotlib.pyplot as plt
-fig, (ax0, ax1) = plt.subplots(ncols=2, figsize=(10, 8))
-vmin = dem.min()
-vmax = dem.max()
+    grid = flopy.discretization.StructuredGrid(
+        top=dem,
+        botm=botm,
+        delc=delc,
+        delr=delr,
+        idomain=idomain,
+        nlay=1,
+        nrow=nrow,
+        ncol=ncol
+    )
 
-ax0.imshow(dem.reshape(nrow, ncol), interpolation="None", vmin=vmin, vmax=vmax)
-obj = ax1.imshow(wf, interpolation="None", vmin=vmin, vmax=vmax)
-plt.colorbar(obj)
-plt.show()
-print('break')
+    e_nodes = identify_edge_nodes(grid)
+
+    pro = cProfile.Profile()
+    pro.enable()
+
+    wf = sink_fill(grid, dem, eps=1e-04, method="priority")
+
+    pro.disable()
+    stats = pstats.Stats(pro)
+    stats.print_stats()
+    wf = wf.reshape((nrow, ncol))
+
+
+    fig, (ax0, ax1) = plt.subplots(ncols=2, figsize=(10, 8))
+    vmin = dem.min()
+    vmax = dem.max()
+
+    ax0.imshow(dem.reshape(nrow, ncol), interpolation="None", vmin=vmin, vmax=vmax)
+    obj = ax1.imshow(wf, interpolation="None", vmin=vmin, vmax=vmax)
+    ax0.set_title("A. Original DEM", loc="left")
+    ax1.set_title("B. Filled DEM", loc="left")
+
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+    fig.colorbar(obj, cax=cbar_ax)
+
+    plt.show()
+    print('break')
