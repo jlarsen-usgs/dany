@@ -6,28 +6,41 @@ import flopy
 
 def fill_sinks(modelgrid, dem, eps=1e-04, seed=0):
     """
+    Iterative sink fill method based on Planchon and Darboux, 2001:  "A fast
+    simple and versitile algorithm to fill the depressions of digital
+    elevation models"
 
-    :param modelgrid:
-    :param dem:
-    :return:
+    Parameters
+    ----------
+    modelgrid : flopy.discretization.Grid
+    dem : np.ndarray
+        digital elevation array
+    eps : float
+        small fill value to raise cells for digital drainage
+    seed : int
+        pour point location for seeding the fill operation
+    Returns
+    -------
+        np.ndarray: filled dem
     """
-    z = dem.ravel()
+    dem = dem.ravel()
     neighbors = modelgrid.neighbors(method="queen", as_nodes=True)
 
-    w = np.ones(z.size) * 1e+10
-    w[seed] = z[seed]
+    wf = np.ones(dem.size) * 1e+10
+    wf[seed] = dem[seed]
 
     modified = True
     niter = 0
     while modified:
         niter += 1
-        modified, w = _sink_fill(z, w, eps, neighbors)
+        modified, wf = _sink_fill(dem, wf, eps, neighbors)
         print(niter)
 
-    return w
+    return wf
 
-# potentially do network analysis to speed this process up...
-def _sink_fill(z, w, eps, neighbors):
+
+# potentially implement network analysis method to speed this process up...
+def _sink_fill(dem, wf, eps, neighbors):
     """
     Method based on Planchon and Darboux, 2001:  "A fast simple and versitile
     algorithm to fill the depressions of digital elevation models"
@@ -37,38 +50,62 @@ def _sink_fill(z, w, eps, neighbors):
     run. Watershed delineation might be in order prior to running this, or we
     could set it up as a method that you run for -2 cells within the model...
 
+    Parameters
+    ----------
+    dem : np.ndarray
+        numpy array of digital elevations
+    wf : np.ndarray
+        numpy array of filled elevations and flood elevations
+    eps : float
+        small fill value to raise cells for digital drainage
+    neighbors : dict
+        dictionary of node : neighbors
 
-    :param z:
-    :param w:
-    :param eps:
-    :param neighbors:
-    :return:
+    Returns
+    -------
+    tuple (bool, np.ndarray) returns a tuple that includes a flag to indicate
+    if modifications were performed and the filled/flooded elevations.
     """
     modified = False
-    for c in range(z.size):
+    for c in range(dem.size):
         nc = neighbors[c]
-        if w[c] > z[c]:
-            nidx = np.where(z[c] >= w[nc] + eps)[0]
+        if wf[c] > dem[c]:
+            nidx = np.where(dem[c] >= wf[nc] + eps)[0]
             if len(nidx) > 0:
-                w[c] = z[c]
+                wf[c] = dem[c]
                 modified = True
             else:
-                nidx = np.where(w[nc] + eps < w[c])[0]
+                nidx = np.where(wf[nc] + eps < wf[c])[0]
                 if len(nidx > 0):
                     nc = [nc[i] for i in nidx]
-                    wn = np.max(w[nc])
-                    w[c] = wn + eps
+                    wn = np.max(wf[nc])
+                    wf[c] = wn + eps
                     modified = True
-    return modified, w
+    return modified, wf
 
 
 def priority_flood(modelgrid, dem, seed=0, eps=1e-06):
     """
-    Priority flood method, Barnes, Lehman, and Mulla sink fill method.
+    Priority flood method for sink fill operations based on Barnes and others,
+    2014, "Priority-flood: An optimal depression-filling and watershed-labeling
+    algorithm for digital elevation models"
 
-    Fast eps-improved priority flood method
+    This implementation uses the fast eps-improved priority flood method
 
-    :return:
+    Parameters
+    ----------
+    modelgrid : flopy.discretization.Grid object
+    dem : np.ndarray
+        numpy array of DEM elevations
+    seed : cell number for beginning the flood fill (pour point)
+    eps : float
+        epsilon difference for filled cells. This raises the cell by a small
+        value compared to neighbors, this can be set to zero for a flat fill.
+
+    Returns
+    -------
+    np.array : filled numpy array of Digital elevations
+
     """
     import heapq
     dem = dem.ravel()
@@ -81,7 +118,6 @@ def priority_flood(modelgrid, dem, seed=0, eps=1e-06):
     closed = np.zeros(dem.size, dtype=bool)
     closed[seed] = True
     neighbors = modelgrid.neighbors(method="queen", as_nodes=True)
-    # neighbors2 = modelgrid.neighbors(method="rook", as_nodes=True)
 
     while open or pit:
         if pit:
@@ -101,6 +137,18 @@ def priority_flood(modelgrid, dem, seed=0, eps=1e-06):
                 heapq.heappush(open, (newdem[n], n))
 
     return newdem
+
+
+# todo: test on actual watersheds with divides. Seed method will might
+#   cause failures as edge nodes were the preferred seeds in the literature.
+#   We need to overcome that because we are not able to easily identify edges
+#   in unstructured and vertex grids
+#   we could use the number of vertexes vs. the number of neighbors to determine
+#   if a cell is an edge cell...
+
+
+def identify_edge_nodes(modelgrid):
+    pass
 
 
 
