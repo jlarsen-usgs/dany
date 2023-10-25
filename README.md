@@ -10,8 +10,6 @@ workshop for developing grid independent flow accumulation algorithms
    - MF2005 segment data
    - methods for incorporating linework
    - methods for incorporation GIS data in SFR parameterization (ex. NHDPlus/NHGF data)
-   - valley/sink detection methods for flow accumulation
-   - fill methods for flow accumulation
 
 ## completed:
 First pass completion on:
@@ -23,3 +21,4 @@ First pass completion on:
    - MF2005 reach data
    - MF6 connection data
    - PRMS many to one cascades
+   - DEM conditioning (sink and pit detection and fill methods)
