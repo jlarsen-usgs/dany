@@ -389,7 +389,8 @@ class PrmsStreams(StreamBase):
         self,
         stream_array=None,
         basin_boundary=None,
-        many2many=False
+        many2many=False,
+        threshold=1e-06
     ):
         """
         Method to get PRMS/pyWatershed cascades
@@ -407,7 +408,7 @@ class PrmsStreams(StreamBase):
                 self._build_many_to_one_cascades(basin_boundary=basin_boundary)
         else:
             self._build_many_to_many_cascades(
-                basin_boundary=basin_boundary, threshold=1e-06
+                basin_boundary=basin_boundary, threshold=threshold
             )
 
         hru_up_id = np.array(hru_up_id, dtype=int)
