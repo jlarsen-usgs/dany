@@ -68,7 +68,7 @@ class FlowDirections:
             # calculate the determinant of each line in polygon
             area_x2 += xverts[:, i - 1] * yverts[:, i] - yverts[:, i - 1] * xverts[:, i]
 
-        area = area_x2 / 2.
+        area = np.abs(area_x2 / 2.)
         return np.ravel(area)
 
     def _fill_irregular_neighbor_array(self):
@@ -283,10 +283,21 @@ class FlowDirections:
 
         return nidp_array
 
-    def flow_acculumation(self):
+    def flow_accumulation(self, as_cells=False):
         """
+        Method to perform an accumulation of upslope areas or cells for
+        each cell in the analysis
 
-        :return:
+        Parameters
+        ----------
+        as_cells : bool
+            boolean flag to accumulate based on the number of incoming drainage
+            cells instead of drainage area. This is how pyGSFLOW
+            (Larsen et al., 2022) performed accumulation. Default is False.
+
+        Returns
+        -------
+            np.ndarray
         """
         nidp_array = self.get_nidp()
         flow_acc = np.ones(self._shape).ravel()
@@ -308,8 +319,13 @@ class FlowDirections:
                     break
                 n = self._fdir[n]
 
-        self._facc = flow_acc_area
-        return flow_acc_area.reshape(self._shape)
+        if as_cells:
+            self._facc = flow_acc
+            return flow_acc.reshape(self._shape)
+
+        else:
+            self._facc = flow_acc_area
+            return flow_acc_area.reshape(self._shape)
 
     def get_watershed_boundary(self, point, **kwargs):
         """

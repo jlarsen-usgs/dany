@@ -1,5 +1,4 @@
 import numpy as np
-import flopy
 
 
 class StreamBase:
@@ -60,7 +59,7 @@ class StreamBase:
             np.ndarray : binaray numpy array of stream cell locations
         """
         if isinstance(contrib_area, np.ndarray):
-            contrib_area = contrib_area.ravel
+            contrib_area = contrib_area.ravel()
             if contrib_area.size != self._facc.size:
                 raise AssertionError(
                     f"contrib_area array size {contrib_area.size} is not "
@@ -69,6 +68,10 @@ class StreamBase:
         stream_array = np.where(self._facc >= contrib_area, 1, 0).astype(int)
         if basin_boundary is not None:
             stream_array[basin_boundary.ravel() == 0] = 0
+
+        # todo: check and remove stranded streams...
+        #   also could be good to check that there are > n cells upslope from
+        #   a segment junction...
 
         self._stream_array = stream_array.reshape(self._shape)
         return self._stream_array
