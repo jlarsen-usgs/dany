@@ -82,7 +82,7 @@ def make_stream_mask(shp, modelgrid):
 
 if __name__ == "__main__":
     resample = False
-    approach = 2
+    approach = 3
     ws = os.path.abspath(os.path.dirname(__file__))
     data_ws = os.path.join(ws, "data", "Lolo_Voronoi_Grid")
     grid_shp = os.path.join(data_ws, "LoloCr_voronoiGrid.shp")
@@ -106,12 +106,8 @@ if __name__ == "__main__":
     else:
         dem = np.genfromtxt(dem_ascii).ravel()
 
-    # pmv = PlotMapView(modelgrid=vgrid)
-    # pc = pmv.plot_array(conditioned_dem)
-    # pmv.plot_grid()
-    # plt.colorbar(pc)
-    # plt.show()
     if approach == 1:
+        # accumulate flow to existing grid
         conditioned_dem = fill_sinks(vgrid, dem)
         fobj = FlowDirections(vgrid, conditioned_dem)
         fdir = fobj.flow_direction_array
@@ -133,7 +129,7 @@ if __name__ == "__main__":
 
         np.savetxt(fa_dem_grid_supplied, strm_array, fmt="%d")
 
-    if approach == 2:
+    elif approach == 2:
         stream_vector_file = os.path.join(data_ws, "Lolo_Streams_UTM.shp")
         stream_mask = make_stream_mask(stream_vector_file, vgrid)
         stream_v_cells = np.where(stream_mask > 0)[0]
@@ -162,8 +158,22 @@ if __name__ == "__main__":
 
         print('break')
 
-    if approach == 3:
+    elif approach == 3:
+        # cellular NIDP (pyGSFLOW method)
+        conditioned_dem = fill_sinks(vgrid, dem)
+        fobj = FlowDirections(vgrid, conditioned_dem)
+        fdir = fobj.flow_direction_array
+        facc = fobj.flow_accumulation(as_cells=True)
+
+        strms = PrmsStreams(vgrid, fobj)
+        strm_array = strms.delineate_streams(contrib_area=75)
+        pmv = PlotMapView(modelgrid=vgrid)
+        pc = pmv.plot_array(strm_array)
+        # pmv.plot_grid()
+        plt.colorbar(pc)
+        plt.show()
+
+    elif approach == 4:
         pass
-        # this is a cellular approach, re-implement cellular NIDP for flow_accumulation & contrib_area
     # todo: consider developing a workflow starting at structured FA
     #   define stream vectors then create a voronoi and re-FA.
