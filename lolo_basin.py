@@ -3,6 +3,8 @@ import flopy
 import matplotlib.pyplot as plt
 from flopy.plot import PlotMapView
 import numpy as np
+import geopandas as gpd
+from shapely.geometry import LineString
 import shapefile
 import warnings
 from shapely.errors import ShapelyDeprecationWarning
@@ -12,6 +14,9 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 from dem_conditioning import fill_sinks
 from flow_directions import FlowDirections
 from stream_util import PrmsStreams
+
+from gsflow.builder import GenerateFishnet
+
 
 
 def build_grid_instance(shp):
@@ -80,9 +85,23 @@ def make_stream_mask(shp, modelgrid):
     return mask
 
 
+def get_grid_bounds(shp):
+    with shapefile.Reader(shp) as r:
+        bounds = r.bbox
+
+    polygon = [
+        (bounds[0], bounds[1]),
+        (bounds[0], bounds[3]),
+        (bounds[2], bounds[3]),
+        (bounds[2], bounds[1]),
+        (bounds[0], bounds[1])
+    ]
+    return [bounds[0], bounds[2], bounds[1], bounds[3]], polygon
+
+
 if __name__ == "__main__":
     resample = False
-    approach = 3
+    approach = 4
     ws = os.path.abspath(os.path.dirname(__file__))
     data_ws = os.path.join(ws, "data", "Lolo_Voronoi_Grid")
     grid_shp = os.path.join(data_ws, "LoloCr_voronoiGrid.shp")
@@ -91,9 +110,11 @@ if __name__ == "__main__":
     fa_dem_grid_supplied = os.path.join(data_ws, "streams_grid_supplied_no_strm_correction.csv")
 
     vgrid = build_grid_instance(grid_shp)
+    bbox, bounds_polygon = get_grid_bounds(grid_shp)
 
     if resample:
         raster = flopy.utils.Raster.load(dem_file)
+        raster.crop(bounds_polygon)
         dem = raster.resample_to_grid(vgrid, band=raster.bands[0], method="min")
         nanval = raster.nodatavals[0]
         idx = np.where(dem == nanval)[0]
@@ -156,8 +177,6 @@ if __name__ == "__main__":
         plt.colorbar(pc)
         plt.show()
 
-        print('break')
-
     elif approach == 3:
         # cellular NIDP (pyGSFLOW method)
         conditioned_dem = fill_sinks(vgrid, dem)
@@ -167,6 +186,12 @@ if __name__ == "__main__":
 
         strms = PrmsStreams(vgrid, fobj)
         strm_array = strms.delineate_streams(contrib_area=75)
+
+        pmv = PlotMapView(modelgrid=vgrid)
+        pc = pmv.plot_array(conditioned_dem)
+        plt.colorbar(pc)
+        plt.show()
+
         pmv = PlotMapView(modelgrid=vgrid)
         pc = pmv.plot_array(strm_array)
         # pmv.plot_grid()
@@ -174,6 +199,47 @@ if __name__ == "__main__":
         plt.show()
 
     elif approach == 4:
-        pass
+        # todo: need to trim DEM
+        pploc = (723400, 5181350)
+        sgrid = GenerateFishnet(bbox, xcellsize=250, ycellsize=250)
+
+        raster = flopy.utils.Raster.load(dem_file)
+        raster.crop(bounds_polygon)
+        dem = raster.resample_to_grid(sgrid, band=raster.bands[0], method="min")
+        dem = np.where(dem == raster.nodatavals[0], np.nan, dem)
+
+        # now delineate initial stream locations and watershed
+        conditioned_dem = fill_sinks(sgrid, dem)
+        fdir = FlowDirections(sgrid, conditioned_dem)
+        facc = fdir.flow_accumulation()
+        watershed = fdir.get_watershed_boundary(pploc)
+        facc[watershed == 0] = np.nan
+
+        pmv = PlotMapView(modelgrid=sgrid)
+        lfacc = np.log10(facc)
+        pc = pmv.plot_array(lfacc)
+        # pmv.plot_grid()
+        plt.colorbar(pc)
+        plt.show()
+
+        strms = PrmsStreams(sgrid, fdir)
+        strm_array = strms.delineate_streams(contrib_area=4e6).astype(float)
+        strm_array[watershed == 0] = np.nan
+        vectors = strms.create_stream_vectors(strm_array)
+
+        geom = [LineString(v) for v in vectors.values()]
+        segs = [k for k in vectors.keys()]
+        gdf = gpd.GeoDataFrame({"geometry": geom, "segments": segs})
+        fig, ax = plt.subplots(figsize=(8, 6))
+        pmv = PlotMapView(modelgrid=sgrid, ax=ax)
+        strm_array[watershed == 0] = np.nan
+        pc = pmv.plot_array(strm_array)
+        gdf.plot(ax=ax)
+        plt.show()
+
+        pmv = PlotMapView(modelgrid=sgrid)
+        pc = pmv.plot_array(strm_array)
+        plt.show()
+
     # todo: consider developing a workflow starting at structured FA
     #   define stream vectors then create a voronoi and re-FA.

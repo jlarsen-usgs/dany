@@ -229,6 +229,59 @@ class StreamBase:
         self._node_seg_rch = np.array(nd_seg_rch)
         return seg_graph
 
+    def create_stream_vectors(self, stream_array=None):
+        """
+        Method to create stream vectors (lines) from a binary
+        stream array
+
+        strm_array : np.ndarray
+
+        Returns
+        -------
+            dict : {seg : [[x0, y0],...[xn, yn]]}
+        """
+        if stream_array is not None:
+            stream_array = stream_array.copy()
+            stream_array[np.isnan(stream_array)] = 0
+        seg_graph = self._mf2005_stream_connectivity(stream_array)
+        # get headwater segs
+        headwaters = []
+        seg_graph_r = {v: k for k, v in seg_graph.items()}
+        for k, v in seg_graph.items():
+            if k not in seg_graph_r:
+                headwaters.append(k)
+
+        vectors = {}
+        processed = []
+        stack = []
+        nsr = self._node_seg_rch.copy()
+        while headwaters or stack:
+            if stack:
+                seg = stack.pop(0)
+            else:
+                seg = headwaters.pop(0)
+            bool_slice = nsr[:, 1] == seg
+            current_seg = nsr[bool_slice, :]
+            nodes = list(current_seg[:, 0])
+
+            # add downstream connection
+            dn_seg = seg_graph[seg]
+            if dn_seg != 0:
+                if dn_seg not in processed:
+                    stack.append(dn_seg)
+                bool_slice = nsr[:, 1] == dn_seg
+                down_seg = nsr[bool_slice, :]
+                nodes.append(down_seg[0, 0])
+
+            xverts = self._modelgrid.xcellcenters.ravel()[nodes]
+            yverts = self._modelgrid.ycellcenters.ravel()[nodes]
+            vector = list(zip(xverts, yverts))
+            if len(vector) > 1:
+                vectors[seg] = vector
+                processed.append(seg)
+
+        return vectors
+
 
 class Sfr6(StreamBase):
     """
