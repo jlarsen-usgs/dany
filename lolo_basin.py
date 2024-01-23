@@ -2,6 +2,9 @@ import os
 import flopy
 import matplotlib.pyplot as plt
 from flopy.plot import PlotMapView
+from flopy.utils.triangle import Triangle
+from flopy.utils.voronoi import VoronoiGrid
+from flopy.discretization import VertexGrid
 import numpy as np
 import geopandas as gpd
 from shapely.geometry import LineString
@@ -104,6 +107,7 @@ if __name__ == "__main__":
     approach = 4
     ws = os.path.abspath(os.path.dirname(__file__))
     data_ws = os.path.join(ws, "data", "Lolo_Voronoi_Grid")
+    tri_ws = os.path.join(ws, "data", "triangle_grid")
     grid_shp = os.path.join(data_ws, "LoloCr_voronoiGrid.shp")
     dem_file = os.path.join(data_ws, "USGS_13_lolo_utm.tif")
     dem_ascii = os.path.join(data_ws, "USGS_13_lolo_utm_dem_ascii.csv")
@@ -230,16 +234,48 @@ if __name__ == "__main__":
         geom = [LineString(v) for v in vectors.values()]
         segs = [k for k in vectors.keys()]
         gdf = gpd.GeoDataFrame({"geometry": geom, "segments": segs})
+        gdf = gdf.dissolve()
+        gdf["geometry"] = gdf.geometry.buffer(400, cap_style=2, join_style=3) # cs2 for flat ends
         fig, ax = plt.subplots(figsize=(8, 6))
         pmv = PlotMapView(modelgrid=sgrid, ax=ax)
         strm_array[watershed == 0] = np.nan
         pc = pmv.plot_array(strm_array)
-        gdf.plot(ax=ax)
+        gdf.plot(ax=ax, alpha=0.5)
         plt.show()
 
-        pmv = PlotMapView(modelgrid=sgrid)
+        sgdf = sgrid.geo_dataframe
+        iloc = np.where(watershed.ravel() > 0)[0]
+        sgdf = sgdf.iloc[iloc]
+        sgdf = sgdf.dissolve()
+
+        gdf = gpd.overlay(gdf, sgdf, how="intersection")
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        pmv = PlotMapView(modelgrid=sgrid, ax=ax)
+        strm_array[watershed == 0] = np.nan
         pc = pmv.plot_array(strm_array)
+        # sgdf.plot(ax=ax)
+        gdf.plot(ax=ax, alpha=0.5)
         plt.show()
 
+        wsloc = (710000, 5172000)
+        srloc = (712000, 5181600)
+        tri_ws = os.path.join(ws, "data", "triangle_grid")
+        tri = flopy.utils.triangle.Triangle(angle=30, model_ws=tri_ws)
+
+        tri.add_polygon(sgdf.geometry.values[0])
+        tri.add_polygon(gdf.geometry.values[0], ignore_holes=True)
+        tri.add_region(wsloc, 0, maximum_area=250 * 250 * 100)
+        tri.add_region(pploc, 1, maximum_area=250 * 250)
+        tri.build()
+
+        tri.plot()
+        plt.show()
+
+        vor = flopy.utils.voronoi.VoronoiGrid(tri)
+        gridprops = vor.get_gridprops_vertexgrid()
+        vgrid = VertexGrid(**gridprops)
+
+        print('break')
     # todo: consider developing a workflow starting at structured FA
     #   define stream vectors then create a voronoi and re-FA.
