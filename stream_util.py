@@ -222,7 +222,7 @@ class StreamBase:
             seg_array[idx] = new_seg
 
         self._stream_array = seg_array.reshape(
-            (self._modelgrid.nrow, self._modelgrid.ncol)
+            tuple(self._modelgrid.shape[1:])
         )
         self._graph = graph
         self._seg_graph = seg_graph
@@ -419,6 +419,7 @@ class PrmsStreams(StreamBase):
     def __init__(self, modelgrid, faobj, **kwargs):
         if faobj is not None:
             super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
+            self._faobj = faobj
 
     def get_stream_connectivity(self, stream_array=None, group_segments=False):
         """
@@ -457,15 +458,20 @@ class PrmsStreams(StreamBase):
         # todo: need to grab the "threshold" from flow_directions/accumulation,
         #  should this be stored internally in facc?
         if stream_array is None:
-            stream_array = self.stream_array.ravel()
+            stream_array = self.stream_array
+
+        stream_array = stream_array.ravel()
 
         if not many2many:
             hru_up_id, hru_down_id, hru_pct_up = \
                 self._build_many_to_one_cascades(basin_boundary=basin_boundary)
         else:
-            self._build_many_to_many_cascades(
-                basin_boundary=basin_boundary, threshold=threshold
-            )
+            hru_up_id, hru_down_id, hru_pct_up = \
+                self._build_many_to_many_cascades(
+                    stream_array=stream_array,
+                    basin_boundary=basin_boundary,
+                    threshold=threshold
+                )
 
         hru_up_id = np.array(hru_up_id, dtype=int)
         hru_down_id = np.array(hru_down_id, dtype=int)
@@ -480,6 +486,7 @@ class PrmsStreams(StreamBase):
 
         hru_down_id += 1
         hru_up_id += 1
+        hru_strmseg_down_id = np.array(hru_strmseg_down_id)
         return hru_up_id, hru_down_id, hru_pct_up, hru_strmseg_down_id
 
     def _build_many_to_one_cascades(self, basin_boundary=None):
@@ -518,6 +525,7 @@ class PrmsStreams(StreamBase):
 
     def _build_many_to_many_cascades(
         self,
+        stream_array,
         basin_boundary=None,
         threshold=1e-06
     ):
@@ -531,9 +539,58 @@ class PrmsStreams(StreamBase):
         if basin_boundary is not None:
             fdir[basin_boundary.ravel() == 0] = 0
 
+        hru_up_id = []
+        hru_down_id = []
+        hru_pct_up = []
+        stream_nodes = np.where(stream_array > 0)[0]
+        slopes = self._faobj._calculate_slopes(threshold=threshold)
+        fcells = [
+            list(np.where(slope <= 0)[0]) for slope in slopes
+        ]
 
+        for node, hru_down in enumerate(fdir):
+            if hru_down == 0:
+                continue
 
-        return
+            if node in stream_nodes:
+                # force many to one connection for stream cells
+                if fdir[hru_down] == 0:
+                    # trap for outlets; set hru_up and hru_down to same val
+                    hru_downs = node
+                else:
+                    hru_downs = hru_down
+
+                hru_up_id.append(node)
+                hru_down_id.append(hru_downs)
+                hru_pct_up.append(1)
+            else:
+                # many to many connection for all landscape cells
+                flow_to = fcells[node]
+                conns = self._faobj._fneighbors[node, flow_to]
+
+                # fix the watershed divide case where there could be cascade
+                #  links that point out of the active model extent based
+                #  on slope
+                flow_to = np.array(flow_to)
+                keep_idx = [ix for ix, conn in enumerate(conns) if fdir[conn] != 0]
+                flow_to = list(flow_to[keep_idx])
+                conns = conns[keep_idx]
+
+                # get the slopes and calculate % flows
+                dn_slopes = slopes[node, flow_to]
+                hru_pcts = np.abs(dn_slopes) / np.sum(np.abs(dn_slopes))
+
+                # remove links with low fraction of flow
+                keep_idx = np.where(hru_pcts > 0.01)[0]
+                dn_slopes = dn_slopes[keep_idx]
+                hru_pcts = np.abs(dn_slopes) / np.sum(np.abs(dn_slopes))
+                hru_downs = conns[keep_idx]
+
+                hru_up_id.extend([node,] * len(hru_pcts))
+                hru_down_id.extend(list(hru_downs))
+                hru_pct_up.extend(hru_pcts)
+
+        return hru_up_id, hru_down_id, hru_pct_up
 
 
 class Topology(object):

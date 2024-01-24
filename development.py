@@ -6,7 +6,7 @@ import numpy as np
 from flopy.utils import Raster
 from dem_conditioning import fill_sinks
 from flow_directions import FlowDirections
-from stream_util import Sfr6, Sfr2005
+from stream_util import Sfr6, Sfr2005, PrmsStreams
 from gsflow.builder import GenerateFishnet
 import shapefile
 
@@ -48,9 +48,14 @@ fa = FlowDirections(modelgrid, wf)
 
 fdir = fa.flow_direction_array
 nidp = fa.get_nidp()
-facc = fa.flow_acculumation()
+facc = fa.flow_accumulation()
 wshed = fa.get_watershed_boundary(pour_point)
 sbsin = fa.get_subbasins(pour_points)
+
+prms_strms = PrmsStreams(modelgrid, fa)
+strm_array = prms_strms.delineate_streams(contrib_area, wshed)
+cascades = prms_strms.get_cascades(strm_array, basin_boundary=wshed, many2many=True)
+
 
 strms = Sfr2005(modelgrid, fa)
 strm_array = strms.delineate_streams(contrib_area, wshed)
