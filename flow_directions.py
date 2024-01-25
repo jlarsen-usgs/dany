@@ -5,7 +5,17 @@ from stream_util import Topology
 
 class FlowDirections:
     """
-    Ahhhh!!!!
+    Flow direction and flow accumulation class that works with FloPy's
+    StructuredGrid, VertexGrid, and/or UnstructuredGrid. This class performs
+    d-n flow accumulation by using a queen neighbor algorithm to map
+    potential paths for flow.
+
+    Parameters
+    ----------
+    modelgrid : flopy.discretization.Grid instance
+    dem : np.ndarray
+        numpy array of resampled DEM elevations
+
     """
     def __init__(self, modelgrid, dem):
         self._modelgrid = modelgrid
@@ -341,13 +351,15 @@ class FlowDirections:
         if isinstance(point, (tuple, list, np.ndarray)):
             if len(point) != 2:
                 raise AssertionError(
-                    "point must be an interable with only x, y values"
+                   "point must be an interable with only x, y values"
                 )
         else:
             point = GeoSpatialUtil(point, shapetype='point').points
 
         cellid = self._modelgrid.intersect(*point)
         if isinstance(cellid, tuple):
+            if len(cellid) > 2:
+                cellid = cellid[1:]
             cellid = (0,) + cellid
             cellid = self._modelgrid.get_node([cellid,])[0]
 
