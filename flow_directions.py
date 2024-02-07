@@ -17,7 +17,7 @@ class FlowDirections:
         numpy array of resampled DEM elevations
 
     """
-    def __init__(self, modelgrid, dem):
+    def __init__(self, modelgrid, dem, check_elevations=True):
         self._modelgrid = modelgrid
         self._grid_type = modelgrid.grid_type
 
@@ -40,7 +40,15 @@ class FlowDirections:
             [np.mean(modelgrid.ycellcenters) + 0.1]
         )
 
+        min_cell = np.where(self._dem == np.nanmin(self._dem))[0]
+        if check_elevations:
+            if min_cell.size > 1:
+                raise AssertionError(
+                   "multiple cells have the same minimum elevation, please "
+                   "reduce the elevation at the basin outlet"
+                )
         self._fdir = np.full(self._dem.size - 1, -1)
+        self._fdir[min_cell[0]] = min_cell[0]
         self._fdir_r = None
         self._facc = None
         self._fillval = self._dem[-1]

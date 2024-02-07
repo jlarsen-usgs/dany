@@ -245,3 +245,51 @@ def _identify_edge_nodes(modelgrid):
             edge_nodes = edge_nodes | nodes
 
     return list(sorted(edge_nodes))
+
+
+def fill_nan_values(modelgrid, dem, method="mean"):
+    """
+    Method to fill nan's in resampled raster. Sets the cell elevation to the
+    based on the elevation of neighboring cells
+
+    Parameters
+    ----------
+    modelgrid : flopy.discretization.Grid object
+
+    dem : np.array
+        array of DEM values
+
+    method : str
+        valid methods are "mean" (default), "median", "min", and "max"
+
+    Returns
+    -------
+    filled_dem : np.array
+        nan filled dem
+    """
+    filled_dem = np.ravel(dem).copy()
+    stack = list(np.where(np.isnan(filled_dem))[0])
+    neighbors = modelgrid.neighbors(as_nodes=True, method="queen")
+    method = method.lower()
+
+    while stack:
+        node = stack.pop()
+        nn = neighbors[node]
+        elevs = filled_dem[nn]
+        if method == "mean":
+            elev = np.nanmean(elevs)
+        elif method == "median":
+            elev = np.nanmedian(elevs)
+        elif method == "min":
+            elev = np.nanmin(elevs)
+        elif method == "max":
+            elev = np.nanmax(elevs)
+        else:
+            raise NotImplementedError(f"{method} has not been implemented")
+
+        if np.isnan(elev):
+            stack.append(node)
+        else:
+            filled_dem[node] = elev
+
+    return filled_dem
