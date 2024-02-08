@@ -15,9 +15,19 @@ class FlowDirections:
     modelgrid : flopy.discretization.Grid instance
     dem : np.ndarray
         numpy array of resampled DEM elevations
-
+    check_elevations : bool
+        boolean flag that asserts a single unique minimum elevation in the DEM
+    burn_threshold : float
+        small threshold to "burn" through digital artificts in the slope
+        calculation for flow directions. Elevations within this threshold
+        will be treated as digitally flat for the slope calculation.
     """
-    def __init__(self, modelgrid, dem, check_elevations=True):
+    def __init__(
+        self,
+        modelgrid,
+        dem,
+        check_elevations=True,
+    ):
         self._modelgrid = modelgrid
         self._grid_type = modelgrid.grid_type
 
@@ -30,7 +40,7 @@ class FlowDirections:
         self._area = self._shoelace_area()
         self._fneighbors = None
         # self._dem = dem.ravel()
-        self._dem = np.array(list(dem.ravel()) + [1e+10])
+        self._dem = np.array(list(dem.ravel().copy()) + [1e+10])
         self._xcenters = np.array(
             list(modelgrid.xcellcenters.ravel()) +
             [np.mean(modelgrid.xcellcenters) + 0.1]
@@ -47,15 +57,13 @@ class FlowDirections:
                    "multiple cells have the same minimum elevation, please "
                    "reduce the elevation at the basin outlet"
                 )
-        self._fdir = np.full(self._dem.size - 1, -1)
-        self._fdir[min_cell[0]] = min_cell[0]
+        self._min_cell = min_cell
+        self._fdir = None
         self._fdir_r = None
         self._facc = None
         self._fillval = self._dem[-1]
         self._fillidx = self._modelgrid.ncpl
-        self._fill_irregular_neighbor_array()
-        slopes = self._calculate_slopes()
-        self._calculate_flowcell(slopes)
+        self._threshold = 1e-6
 
     @property
     def flow_direction_array(self):
@@ -110,7 +118,7 @@ class FlowDirections:
 
         self._fmask = np.where(self._fneighbors == self._fillidx)
 
-    def _calculate_slopes(self, threshold=1e-06):
+    def _calculate_slopes(self):
         """
 
         :param threshold:
@@ -124,7 +132,7 @@ class FlowDirections:
         y1 = self._ycenters[self._fneighbors]
 
         drop = neighbor_elevation - cell_elevation
-        drop = np.where((drop < threshold) & (drop > 0), 0, drop)
+        drop = np.where((drop < self._threshold) & (drop > 0), 0, drop)
         asq = (x1 - x0) ** 2
         bsq = (y1 - y0) ** 2
         dist = np.sqrt(asq + bsq)
@@ -301,6 +309,20 @@ class FlowDirections:
 
         return nidp_array
 
+    def flow_directions(self, burn_threshold=1e-6):
+        """
+
+        :param burn_threshold:
+        :return:
+        """
+        self._threshold = burn_threshold
+        self._fdir = np.full(self._dem.size - 1, -1)
+        self._fdir[self._min_cell] = self._min_cell
+        self._fill_irregular_neighbor_array()
+        slopes = self._calculate_slopes()
+        self._calculate_flowcell(slopes)
+        return self.flow_direction_array
+
     def flow_accumulation(self, as_cells=False):
         """
         Method to perform an accumulation of upslope areas or cells for
@@ -452,4 +474,36 @@ class FlowDirections:
             )
         return subbasins
 
+    @property
+    def slope(self):
+        """
+        Returns the watershed slopes for each hru
 
+        """
+        # todo: store user provided FDIR threshold
+        fdir = self.flow_direction_array.ravel()
+        dem = self._dem[:-1]
+
+        x0, y0 = self._xcenters[:-1], self._ycenters[:-1]
+        x1, y1 = x0[fdir], y0[fdir]
+        drop = dem - dem[fdir]
+        drop = np.where((drop < 1e-06) & (drop > 0), 0, drop)
+        asq = (x0 - x1) ** 2
+        bsq = (y0 - y1) ** 2
+        dist = np.sqrt(asq + bsq)
+        slopes = drop / dist
+        return slopes.reshape(self._shape)
+
+    @property
+    def aspect(self):
+        """
+        Returns the hru's aspect based on the calculated flow direction
+
+        """
+        fdir = self.flow_direction_array.ravel()
+        xc, yc = self._xcenters[:-1], self._ycenters[:-1]
+        xp = xc[fdir] - xc
+        yp = yc[fdir] - yc
+        aspect = np.arctan2(yp, xp) * (180 / np.pi)
+        aspect = np.where(aspect < 0, aspect + 360, aspect)
+        return aspect.reshape(self._shape)

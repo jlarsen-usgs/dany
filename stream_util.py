@@ -447,7 +447,6 @@ class PrmsStreams(StreamBase):
         stream_array=None,
         basin_boundary=None,
         many2many=False,
-        threshold=1e-06
     ):
         """
         Method to get PRMS/pyWatershed cascades
@@ -455,8 +454,6 @@ class PrmsStreams(StreamBase):
         :param stream_array:
         :return:
         """
-        # todo: need to grab the "threshold" from flow_directions/accumulation,
-        #  should this be stored internally in facc?
         if stream_array is None:
             stream_array = self.stream_array
 
@@ -470,7 +467,6 @@ class PrmsStreams(StreamBase):
                 self._build_many_to_many_cascades(
                     stream_array=stream_array,
                     basin_boundary=basin_boundary,
-                    threshold=threshold
                 )
 
         hru_up_id = np.array(hru_up_id, dtype=int)
@@ -527,12 +523,11 @@ class PrmsStreams(StreamBase):
         self,
         stream_array,
         basin_boundary=None,
-        threshold=1e-06
     ):
         """
 
         :param basin_boundary:
-        :param threshold:
+
         :return:
         """
         fdir = self._fdir.copy().ravel()
@@ -543,7 +538,7 @@ class PrmsStreams(StreamBase):
         hru_down_id = []
         hru_pct_up = []
         stream_nodes = np.where(stream_array > 0)[0]
-        slopes = self._faobj._calculate_slopes(threshold=threshold)
+        slopes = self._faobj._calculate_slopes()
         fcells = [
             list(np.where(slope <= 0)[0]) for slope in slopes
         ]
@@ -595,8 +590,8 @@ class PrmsStreams(StreamBase):
 
 class Topology(object):
     """
-    A topological sort method that uses a modified Khan algorithm to sort the
-    SFR network
+    A topological sort method that uses a modified Khan algorithm to sort
+    stream networks by connectivity
 
     Parameters
     ----------
