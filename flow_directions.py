@@ -507,3 +507,16 @@ class FlowDirections:
         aspect = np.arctan2(yp, xp) * (180 / np.pi)
         aspect = np.where(aspect < 0, aspect + 360, aspect)
         return aspect.reshape(self._shape)
+
+    @property
+    def vectors(self):
+        """
+        Return the quiver vectors, U, V for matplotlib quiver
+
+        :return:
+        """
+        aspect = self.aspect.ravel()
+        aspect_radians = aspect * (np.pi / 180)
+        u = np.cos(aspect_radians)
+        v = np.sin(aspect_radians)
+        return u, v
