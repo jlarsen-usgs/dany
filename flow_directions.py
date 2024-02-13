@@ -17,10 +17,7 @@ class FlowDirections:
         numpy array of resampled DEM elevations
     check_elevations : bool
         boolean flag that asserts a single unique minimum elevation in the DEM
-    burn_threshold : float
-        small threshold to "burn" through digital artificts in the slope
-        calculation for flow directions. Elevations within this threshold
-        will be treated as digitally flat for the slope calculation.
+
     """
     def __init__(
         self,
@@ -67,10 +64,18 @@ class FlowDirections:
 
     @property
     def flow_direction_array(self):
+        """
+        Method to return a previously calculated flow direction array
+
+        """
         return self._fdir.reshape(self._shape)
 
     @property
     def flow_accumulation_array(self):
+        """
+        Method that returns a previously calculated flow accumulation array
+
+        """
         return self._facc.reshape(self._shape)
 
     def _shoelace_area(self):
@@ -80,7 +85,8 @@ class FlowDirections:
 
         Returns
         -------
-
+            area : np.ndarray
+                numpy array of cell areas in L^2
         """
         # irregular_shape_patch
         from flopy.plot.plotutil import UnstructuredPlotUtilities
@@ -120,9 +126,14 @@ class FlowDirections:
 
     def _calculate_slopes(self):
         """
+        Internal method that calculates slopes on a "filled"/uniform numpy
+        array of neighboring elevations
 
-        :param threshold:
-        :return:
+        Returns
+        -------
+        slopes : np.ndarray
+            uniform array of neighboring slopes, "fake cells" are given a
+            very large upward slope as fill.
         """
         cell_elevation = np.expand_dims(self._dem[:-1], axis=1)
         neighbor_elevation = self._dem[self._fneighbors]
@@ -147,10 +158,15 @@ class FlowDirections:
 
     def _calculate_flowcell(self, slopes):
         """
-        Method to calculate the flow direction of an array of slopes
+        Method to calculate the d-n flow direction from an array
+        of slopes. Method does not use direction encoding and instead
+        maps the downslope cell flow goes to.
 
-        :param slopes:
-        :return:
+        Parameters
+        ----------
+        slopes : np.ndarray
+            uniform numpy array of neighboring slopes
+
         """
         fcells = [
             list(np.where(slope == np.min(slope))[0]) for slope in slopes
@@ -281,7 +297,9 @@ class FlowDirections:
 
         Returns
         -------
-        None
+        fdir_r : np.ndarray
+            array of reversed flow directions for calculating watershed
+            boundaries
         """
         if self._fdir_r is not None:
             return self._fdir_r
@@ -300,7 +318,10 @@ class FlowDirections:
         """
         Method to calculate the number of input drainage paths of a cell
 
-        :return:
+        Returns
+        -------
+        nidp_array : np.ndarray
+            array of the number of input drainage paths for each cell
         """
         nidp_array = np.zeros(self._fdir.size, dtype=int)
 
@@ -311,9 +332,20 @@ class FlowDirections:
 
     def flow_directions(self, burn_threshold=1e-6):
         """
+        Method to calculate d-n flow directions from DEM data
 
-        :param burn_threshold:
-        :return:
+        Parameters
+        ----------
+        burn_threshold : np.ndarray
+            digital threshold for small numerical artificats. Upslope elevation
+            differences between neighbors within the digital threshold will
+            be treated as digitally flat.
+
+        Returns
+        -------
+        flow_directions : np.ndarray
+            numpy array of cell numbers that each individual cell flows to
+
         """
         self._threshold = burn_threshold
         self._fdir = np.full(self._dem.size - 1, -1)
@@ -337,7 +369,10 @@ class FlowDirections:
 
         Returns
         -------
-            np.ndarray
+        flow_accumulation : np.ndarray
+            numpy array of upslope contributing area or upslope contribing
+            cells
+
         """
         nidp_array = self.get_nidp()
         flow_acc = np.ones(self._shape).ravel()
@@ -369,12 +404,29 @@ class FlowDirections:
 
     def get_watershed_boundary(self, point, **kwargs):
         """
+        Method to digitally determine a watershed boundary based on
+        outflow location ("pour point")
 
-        point :
+        Parameters
+        ----------
+        point : geospatial object
+            point can accept any of the following objects:
+                shapefile.Shape object
+                flopy.utils.geometry objects
+                list of vertices
+                geojson geometry objects
+                shapely.geometry objects
 
         **kwargs :
+            "subbasins" : np.ndarray
+                keyword argument for subbasin delineation, this is an internal
+                kwarg that is called by the `get_subbasins()` method and
+                should not be provided by the user.
 
-        :return:
+        Returns
+        -------
+        subbasins : np.ndarray
+            array of active and inactive areas for a given pour point
         """
         from flopy.utils.geospatial_utils import GeoSpatialUtil
 
@@ -418,8 +470,26 @@ class FlowDirections:
 
     def get_subbasins(self, points):
         """
+        Method to delineate inactive and active model area as well as
+        subbasins within the model based on subbasin outlet points.
 
-        :param points:
+        Parameters
+        ----------
+        points : collection object
+            points can accept the following types
+
+            str : shapefile path
+            PathLike : shapefile path
+            shapefile.Reader object
+            list of [shapefile.Shape, shapefile.Shape,]
+            shapefile.Shapes object
+            flopy.utils.geometry.Collection object
+            list of [flopy.utils.geometry, ...] objects
+            geojson.GeometryCollection object
+            geojson.FeatureCollection object
+            shapely.GeometryCollection object
+            list of [[vertices], ...].
+
         :return:
         """
         from flopy.utils.geospatial_utils import GeoSpatialCollection
@@ -479,8 +549,11 @@ class FlowDirections:
         """
         Returns the watershed slopes for each hru
 
+        Returns
+        -------
+        slopes : np.ndarray
+            slope of the cell's drainage path
         """
-        # todo: store user provided FDIR threshold
         fdir = self.flow_direction_array.ravel()
         dem = self._dem[:-1]
 
@@ -499,6 +572,11 @@ class FlowDirections:
         """
         Returns the hru's aspect based on the calculated flow direction
 
+        Returns
+        -------
+        aspect : np.ndarray
+            aspect of the cell's drainage path
+
         """
         fdir = self.flow_direction_array.ravel()
         xc, yc = self._xcenters[:-1], self._ycenters[:-1]
@@ -513,7 +591,11 @@ class FlowDirections:
         """
         Return the quiver vectors, U, V for matplotlib quiver
 
-        :return:
+        Returns
+        -------
+
+        tuple of vector offsets (U, V) on a unit circle with a radius of 1
+
         """
         aspect = self.aspect.ravel()
         aspect_radians = aspect * (np.pi / 180)

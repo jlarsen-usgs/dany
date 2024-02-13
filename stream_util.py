@@ -3,7 +3,20 @@ import numpy as np
 
 class StreamBase:
     """
-    Base class for stream delineation and building model features
+    Base class for delineating stream locations, generating stream
+    connectivity graphs, and generating model inputs.
+    Not to be instantiated by the user.
+
+    Parameters
+    ----------
+    modelgrid : flopy.discretization.Grid
+        flopy grid object (StructuredGrid, VertexGrid, or UnstructuredGrid)
+    fdir : np.ndarray
+        array of flow directions
+    facc : np.ndarray
+        flow accumulation array
+    shape : np.ndarray
+        user returned shape of the fdir and facc arrays
 
     """
     def __init__(self, modelgrid, fdir, facc, shape):
@@ -22,6 +35,15 @@ class StreamBase:
 
     @property
     def stream_array(self):
+        """
+        Method to return a copy of the delineated stream array
+
+        Returns
+        -------
+        stream_array : np.ndarray
+            returns a copy of the delineated stream array
+
+        """
         if self._stream_array is None:
             raise AssertionError(
                 "delineate_streams() or set_stream_array() must be run prior "
@@ -36,7 +58,9 @@ class StreamBase:
 
         Parameters
         ----------
-        :param stream_array:
+        stream_array : np.ndarray
+            optional array of stream locations, if None is provided method
+            looks for an internally stored stream array
 
         """
         # need to create a trap for unstrucutred grids
@@ -47,7 +71,11 @@ class StreamBase:
 
     def delineate_streams(self, contrib_area, basin_boundary=None):
         """
+        Method to binarize flow accumulation by a contributing area
+        and delineate streams.
 
+        Parameters
+        ----------
         contrib_area : int, float, np.ndarray
             contributing area threshold to binarize flow accumulation
             into streams and landscape.
@@ -57,6 +85,7 @@ class StreamBase:
         Returns
         -------
             np.ndarray : binaray numpy array of stream cell locations
+
         """
         if isinstance(contrib_area, np.ndarray):
             contrib_area = contrib_area.ravel()
@@ -69,19 +98,24 @@ class StreamBase:
         if basin_boundary is not None:
             stream_array[basin_boundary.ravel() == 0] = 0
 
-        # todo: check and remove stranded streams...
-        #   also could be good to check that there are > n cells upslope from
-        #   a segment junction...
-
         self._stream_array = stream_array.reshape(self._shape)
         return self._stream_array
 
     def _mf6_stream_connectivity(self, stream_array=None):
         """
+        Method to determine MF6 stream connectivity by reach
 
-        stream_array :
+        Parameters
+        ----------
+        stream_array : None or np.ndarray
+            optional array of stream locations, if None is provided method
+            looks for an internally stored stream array
 
-        :return:
+        Returns
+        -------
+        stream_graph : dict
+            graph representation of MF6 reach connectivity
+
         """
         if stream_array is None:
             if self._stream_array is None:
@@ -132,10 +166,20 @@ class StreamBase:
 
     def _mf2005_stream_connectivity(self, stream_array=None):
         """
+        Method to return MF2005 SFR connectivity by segment
 
+        Parameters
+        ----------
         stream_array :
+            optional array of stream locations, if None is provided method
+            looks for an internally stored stream array
 
-        :return:
+        Returns
+        -------
+        segment_graph : dict
+            graph representation of stream connectivity by MF2005 stream
+            segment
+
         """
         if stream_array is None:
             if self._stream_array is None:
@@ -234,11 +278,19 @@ class StreamBase:
         Method to create stream vectors (lines) from a binary
         stream array
 
+        Parameter
+        ---------
         strm_array : np.ndarray
+            optional array of stream locations, if None is provided method
+            looks for an internally stored stream array
 
         Returns
         -------
-            dict : {seg : [[x0, y0],...[xn, yn]]}
+        dict : {seg : [[x0, y0],...[xn, yn]]}
+            dictionary of segment number and line vertices that can be
+            used to produce shapefiles, geopandas GeoDataFrames or
+            other geospatial objects.
+
         """
         if stream_array is not None:
             stream_array = stream_array.copy()
@@ -285,6 +337,15 @@ class StreamBase:
 
 class Sfr6(StreamBase):
     """
+    Class for generating MODFLOW-6 SFR pacakge stream networks.
+
+    Parameters
+    ----------
+    modelgrid : flopy.discretization.Grid
+
+    faobj : FlowDirection object
+        A flow direction object that has at `flow_directions` and
+        `flow_accumulation` calculated.
 
     """
     def __init__(self, modelgrid, faobj, **kwargs):
@@ -301,6 +362,8 @@ class Sfr6(StreamBase):
         Method to create the modflow 6 connection data block from a graph
         of reach connectivity
 
+        Parameters
+        ----------
         graph : dict, None
             graph of {reach from: reach to}
 
@@ -335,9 +398,19 @@ class Sfr6(StreamBase):
         pass
 
 
-
-
 class Sfr2005(StreamBase):
+    """
+    Class for generating MODFLOW-2005 SFR pacakge stream networks.
+
+    Parameters
+    ----------
+    modelgrid : flopy.discretization.Grid
+
+    faobj : FlowDirection object
+        A flow direction object that has at `flow_directions` and
+        `flow_accumulation` calculated.
+
+    """
     def __init__(self, modelgrid, faobj, **kwargs):
         if faobj is not None:
             super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
@@ -347,14 +420,46 @@ class Sfr2005(StreamBase):
 
     def get_stream_connectivity(self, stream_array=None):
         """
+        Method to get modflow 2005 SFR connectivity based on Segments
 
-        :param stream_array:
-        :return:
+        Parameters
+        ----------
+        stream_array : None, np.ndarray
+            optional array of stream locations, if None is provided method
+            looks for an internally stored stream array
+
+        Returns
+        -------
+        segment_graph : dict
+            graph representation of stream connectivity by MF2005 stream
+            segment
+
         """
         return self._mf2005_stream_connectivity(stream_array=stream_array)
 
-    def reach_data(self, stream_array=None, **kwargs):
-        # start with KRCH IRCH JRCH ISEG IREACH RCHLEN [] and add complexity
+    def reach_data(self, stream_array=None):
+        """
+        Method to generate a basic reach data recarray for Modflow-2005 SFR
+        package. Method fills, KRCH, IRCH, JRCH, ISEG, IREACH, and provides
+        a simple assumption of 1.5 x the connectivity length for RCHLEN.
+        User will need to fill in additional reach parameters and update
+        RCHLEN if 1.5 x connectivity does not represent the system being
+        simulated.
+
+        Parameters
+        ----------
+        stream_array : np.ndarray
+            optional array of stream locations, if None is provided method
+            looks for an internally stored stream array
+
+        Returns
+        -------
+        basic_rec : np.recarray
+            numpy recarray, from flopy, of reach_length input.
+
+        """
+        # start with KRCH IRCH JRCH ISEG IREACH and rchlen based on 1.5 the
+        # cell to cell distance
         if stream_array is None:
             if self._stream_array is None:
                 raise AssertionError(
@@ -415,7 +520,19 @@ class Sfr2005(StreamBase):
 
 
 class PrmsStreams(StreamBase):
+    """
+    Class for generating PRMS/pywatershed stream and cascade connectivity.
 
+    Parameters
+    ----------
+    modelgrid : flopy.discretization.Grid
+        flopy model grid object (StructuredGrid, VertexGrid, or
+        UnstructuredGrid)
+    faobj : FlowDirection object
+        A flow direction object that has at `flow_directions` and
+        `flow_accumulation` calculated.
+
+    """
     def __init__(self, modelgrid, faobj, **kwargs):
         if faobj is not None:
             super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
@@ -427,7 +544,10 @@ class PrmsStreams(StreamBase):
 
         Parameters
         ----------
-        stream_array:
+        stream_array : None or np.ndarray
+            optional array of stream locations, if None is provided method
+            looks for an internally stored stream array
+
         group_segments : bool
             boolean flag that groups stream cells into segments based on
             stream confluences. This produces segments in the MF2005 based
@@ -436,6 +556,10 @@ class PrmsStreams(StreamBase):
 
         Returns
         -------
+        segment_graph : dict
+            a graph representation of the stream connectivity throughout
+            the basin.
+
         """
         if not group_segments:
             return self._mf6_stream_connectivity(stream_array=stream_array)
@@ -451,8 +575,37 @@ class PrmsStreams(StreamBase):
         """
         Method to get PRMS/pyWatershed cascades
 
-        :param stream_array:
-        :return:
+        Parameters
+        ----------
+        stream_array : np.ndarray
+            optional array of stream locations, if None is provided method
+            looks for an internally stored stream array
+        basin_boundary : np.ndarray
+            optional array of active and inactive cells within the basin of
+            interest. It is highly recommended that the user pass this
+            array when the discretization does not conform to the basin
+            boundary (ex. StructuredGrid/DIS models) or a stream array that
+            has been masked to the basin boundary has not been provided.
+        many2many : bool
+            flag to calculate many to many cascades, default is many to one
+
+        Returns
+        -------
+        tuple : (
+            hru_up_id : np.ndarray
+                index of hru numbers that contain a cascading area
+            hru_down_id : np.ndarray
+                index number of the downslope HRU to which the corresponding
+                upslope hru is connected to
+            hru_pct_up : np.ndarray
+                fraction of area used to compute flow to a downslope
+                hru or stream segment.
+            hru_strmseg_down_id : np.ndarray
+                Index number of the stream segment that cascade area
+                contributes flow
+        )
+
+
         """
         if stream_array is None:
             stream_array = self.stream_array
@@ -487,8 +640,28 @@ class PrmsStreams(StreamBase):
 
     def _build_many_to_one_cascades(self, basin_boundary=None):
         """
+        Method to generate many to one cascades
 
-        :return:
+        Parameters
+        ----------
+        basin_boundary : None or np.ndarray
+            optional array of active and inactive cells within the basin of
+            interest. It is highly recommended that the user pass this
+            array when the discretization does not conform to the basin
+            boundary (ex. StructuredGrid/DIS models)
+
+        Returns
+        -------
+        tuple : (
+            hru_up_id : np.ndarray
+                index of hru numbers that contain a cascading area
+            hru_down_id : np.ndarray
+                index number of the downslope HRU to which the corresponding
+                upslope hru is connected to
+            hru_pct_up : np.ndarray
+                fraction of area used to compute flow to a downslope
+                hru or stream segment.
+        )
         """
         fdir = self._fdir.copy().ravel()
         if basin_boundary is not None:
@@ -525,10 +698,30 @@ class PrmsStreams(StreamBase):
         basin_boundary=None,
     ):
         """
+        Method to generate many to many cascades
 
-        :param basin_boundary:
+        Parameters
+        ----------
+        stream_array :
+        basin_boundary :
+            optional array of active and inactive cells within the basin of
+            interest. It is highly recommended that the user pass this
+            array when the discretization does not conform to the basin
+            boundary (ex. StructuredGrid/DIS models)
 
-        :return:
+        Returns
+        -------
+        tuple : (
+            hru_up_id : np.ndarray
+                index of hru numbers that contain a cascading area
+            hru_down_id : np.ndarray
+                index number of the downslope HRU to which the corresponding
+                upslope hru is connected to
+            hru_pct_up : np.ndarray
+                fraction of area used to compute flow to a downslope
+                hru or stream segment.
+        )
+
         """
         fdir = self._fdir.copy().ravel()
         if basin_boundary is not None:
