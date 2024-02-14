@@ -458,8 +458,7 @@ class Sfr2005(StreamBase):
             numpy recarray, from flopy, of reach_length input.
 
         """
-        # start with KRCH IRCH JRCH ISEG IREACH and rchlen based on 1.5 the
-        # cell to cell distance
+        from flopy.modflow import ModflowSfr2
         if stream_array is None:
             if self._stream_array is None:
                 raise AssertionError(
@@ -475,6 +474,8 @@ class Sfr2005(StreamBase):
         basic_rec = []
         xcenters = self._modelgrid.xcellcenters
         ycenters = self._modelgrid.ycellcenters
+        reachid = 1
+        seg_rid_lut = {}
         for iseg, outseg in sorted(self._seg_graph.items()):
             if iseg != 0:
                 idx = np.where(self._node_seg_rch[:, 1] == iseg)[0]
@@ -508,15 +509,75 @@ class Sfr2005(StreamBase):
                             [self._modelgrid.delr[jrch], self._modelgrid.delc[irch]]
                         )
 
-                    record = (0, irch, jrch, iseg, rec[-1], rchlen)
-                    basic_rec.append(record)
+                    node = self._modelgrid.get_node([(0, irch, jrch),])[0]
+                    record = [node, 0, irch, jrch, iseg, rec[-1], rchlen, reachid, reachid + 1]
+                    rec_len = len(record)
+                    if ix == 0:
+                        seg_rid_lut[iseg] = reachid
+                    elif ix == numrch:
+                        record.pop(-1)
+                    else:
+                        pass
 
-        # todo: should this get thrown into a flopy recarray?????
-        #   think of geospatial methods to fill this data
+                    basic_rec.append(record)
+                    reachid += 1
+
+        for ix in range(len(basic_rec)):
+            rec = basic_rec[ix]
+            if len(rec) < rec_len:
+                iseg = rec[3]
+                if iseg not in self._seg_graph:
+                    downreach = 0
+                else:
+                    outseg = self._seg_graph[iseg]
+                    downreach = seg_rid_lut[outseg]
+                basic_rec[ix].append(downreach)
+
+        nreach = len(basic_rec)
+        basic_rec = np.array(basic_rec).T
+
+        reach_data = ModflowSfr2.get_empty_reach_data(nreaches=nreach)
+        reach_data["node"] = basic_rec[0]
+        reach_data["k"] = basic_rec[1]
+        reach_data["i"] = basic_rec[2]
+        reach_data["j"] = basic_rec[3]
+        reach_data["iseg"] = basic_rec[4]
+        reach_data["ireach"] = basic_rec[5]
+        reach_data["rchlen"] = basic_rec[6]
+        reach_data["reachID"] = basic_rec[-2]
+        reach_data["outreach"] = basic_rec[-1]
+
         return basic_rec
 
-    def segment_data(self):
-        pass
+    def segment_data(self, stream_array=None):
+        """
+
+        :return:
+        """
+        from flopy.modflow import ModflowSfr2
+        if stream_array is None:
+            if self._stream_array is None:
+                raise AssertionError(
+                    "delineate_streams() must be run prior to mapping the "
+                    "stream connectivity or a binary array of stream cells "
+                    "must be provided"
+                )
+            stream_array = self._stream_array
+
+        if self._seg_graph is None:
+            self._mf2005_stream_connectivity(stream_array)
+
+        nseg = len(self._seg_graph)
+        segids = []
+        outsegs = []
+        for seg, outseg in sorted(self._seg_graph):
+            segids.append(seg)
+            outsegs.append(outseg)
+
+        recarray = ModflowSfr2.get_empty_segment_data(nsegments=nseg)
+        recarray["nseg"] = outsegs
+        recarray["outseg"] = outsegs
+        return recarray
 
 
 class PrmsStreams(StreamBase):

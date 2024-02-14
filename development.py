@@ -45,7 +45,7 @@ contrib_area = 810000
 wf = fill_sinks(modelgrid, dem_data)
 
 fa = FlowDirections(modelgrid, wf)
-
+fa.flow_directions()
 fdir = fa.flow_direction_array
 nidp = fa.get_nidp()
 facc = fa.flow_accumulation()
