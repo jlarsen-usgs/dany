@@ -357,7 +357,26 @@ class Sfr6(StreamBase):
         else:
             pass
 
-    def make_connection_data(self, graph=None):
+    def get_stream_connectivity(self, stream_array=None):
+        """
+        Method to get modflow 2005 SFR connectivity based on Segments
+
+        Parameters
+        ----------
+        stream_array : None, np.ndarray
+            optional array of stream locations, if None is provided method
+            looks for an internally stored stream array
+
+        Returns
+        -------
+        segment_graph : dict
+            graph representation of stream connectivity by MF2005 stream
+            segment
+
+        """
+        return self._mf6_stream_connectivity(stream_array=stream_array)
+
+    def connectiondata(self, graph=None):
         """
         Method to create the modflow 6 connection data block from a graph
         of reach connectivity
@@ -382,8 +401,10 @@ class Sfr6(StreamBase):
             graph = self._graph
 
         conn_dict = {i: [] for i in sorted(graph.keys())}
-        for reach, reach_to in graph.items():
+        for reach, reach_to in sorted(graph.items()):
             if reach_to != 0:
+                if reach_to == reach:
+                    continue
                 conn_dict[reach].append(-1 * reach_to)
                 conn_dict[reach_to].insert(0, reach)
 
@@ -393,7 +414,7 @@ class Sfr6(StreamBase):
 
         return connection_data
 
-    def make_package_data(self, stream_array=None, **kwargs):
+    def packagedata(self, stream_array=None, **kwargs):
         # cellid and add complexity
         pass
 
