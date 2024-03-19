@@ -57,6 +57,13 @@ strm_array = prms_strms.delineate_streams(contrib_area, wshed)
 cascades = prms_strms.get_cascades(strm_array, basin_boundary=wshed, many2many=True)
 
 
+strms = Sfr6(modelgrid, fa)
+strm_array = strms.delineate_streams(contrib_area, wshed)
+strm_connectivity = strms.get_stream_connectivity(strm_array)
+connectiondata = strms.connectiondata()
+packagedata = strms.packagedata()
+print('break')
+
 strms = Sfr2005(modelgrid, fa)
 strm_array = strms.delineate_streams(contrib_area, wshed)
 stream_connectivity = strms.get_stream_connectivity(strm_array)

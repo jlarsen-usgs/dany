@@ -353,6 +353,7 @@ class Sfr6(StreamBase):
             super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
             self.connection_data = None
             self.package_data = None
+            self._slope = faobj.slope.ravel()
 
         else:
             pass
@@ -414,9 +415,94 @@ class Sfr6(StreamBase):
 
         return connection_data
 
-    def packagedata(self, stream_array=None, **kwargs):
-        # cellid and add complexity
-        pass
+    def packagedata(self, stream_array=None):
+        """
+
+        :param stream_array:
+        :param kwargs:
+        :return:
+        """
+        from flopy.mf6 import ModflowGwfsfr
+        dist_adj = 1.5
+        if stream_array is None:
+            if self._graph is None:
+                if self._stream_array is None:
+                    raise AssertionError(
+                        "get_stream_connectivity() must be run or a stream "
+                        "array of must be provided prior to creating "
+                        "the connection data array"
+                    )
+                else:
+                    graph = self._mf6_stream_connectivity()
+            else:
+                graph = self._graph
+            stream_array = self.stream_array
+        else:
+            graph = self._mf6_stream_connectivity(stream_array)
+
+        stream_array = stream_array.ravel()
+        xcenters = self._modelgrid.xcellcenters.ravel()
+        ycenters = self._modelgrid.ycellcenters.ravel()
+        connection_data = self.connectiondata(graph)
+
+        reachdata = []
+        cnt = 0
+        for rch, rchto in sorted(graph.items()):
+            node = np.where(stream_array == rch)[0][0]
+            if rchto != 0:
+                node_dn = np.where(stream_array == rchto)[0][0]
+            else:
+                node_dn = node
+
+            asq = (xcenters[node] - xcenters[node_dn]) ** 2
+            bsq = (ycenters[node] - ycenters[node_dn]) ** 2
+            dist = np.sqrt(asq + bsq)
+            if dist == 0:
+                # outlet condition
+                iverts = self._modelgrid.iverts[node]
+                verts = np.array([self._modelgrid.verts[iv] for iv in iverts])
+                dist = [
+                    np.sqrt(
+                        (verts[i - 1, 0] - verts[i, 0]) ** 2 +
+                        (verts[i - 1, 1] - verts[i, 1]) ** 2
+                    )
+                    for i in range(1, len(verts))
+                ]
+                dist = np.nanmean(dist)
+
+            rlen = dist * dist_adj
+            if self._modelgrid.grid_type == "structured":
+                cellid = self._modelgrid.get_lrc([node])[0]
+            elif self._modelgrid.grid_type == "vertex":
+                cellid = (0, node)
+            else:
+                cellid = (node,)
+
+            rgrd = self._slope[node] / dist_adj
+            ncon = len(connection_data[cnt]) - 1
+            ustrf = 1.
+            ndv = 0
+            reachdata.append(
+                (rch, cellid, rlen, 0, rgrd, 0, 0, 0, 0, ncon, ustrf, ndv)
+            )
+            cnt += 1
+
+        dtype = [
+            ("ifno", int),
+            ("cellid", object),
+            ("rlen", float),
+            ("rwid", float),
+            ("rgrd", float),
+            ("rtp", float),
+            ("rbth", float),
+            ("rhk", float),
+            ("man", float),
+            ("ncon", int),
+            ("ustrf", float),
+            ("ndv", int)
+        ]
+        struct_arr = np.array(reachdata, dtype=dtype)
+        return struct_arr
 
 
 class Sfr2005(StreamBase):
