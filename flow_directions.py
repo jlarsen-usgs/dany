@@ -63,6 +63,14 @@ class FlowDirections:
         self._threshold = 1e-6
 
     @property
+    def area(self):
+        """
+        Method to return the area of each cell
+
+        """
+        return self._area
+
+    @property
     def flow_direction_array(self):
         """
         Method to return a previously calculated flow direction array

@@ -55,7 +55,12 @@ sbsin = fa.get_subbasins(pour_points)
 prms_strms = PrmsStreams(modelgrid, fa)
 strm_array = prms_strms.delineate_streams(contrib_area, wshed)
 cascades = prms_strms.get_cascades(strm_array, basin_boundary=wshed, many2many=True)
-
+cascades_obj = prms_strms.get_pygsflow_builder_object(
+    stream_array=strm_array,
+    basin_boundary=wshed,
+    many2many=True
+)
+print('break')
 
 strms = Sfr6(modelgrid, fa)
 strm_array = strms.delineate_streams(contrib_area, wshed)

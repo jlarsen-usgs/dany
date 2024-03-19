@@ -948,6 +948,60 @@ class PrmsStreams(StreamBase):
 
         return hru_up_id, hru_down_id, hru_pct_up
 
+    def get_pygsflow_builder_object(
+        self,
+        stream_array=None,
+        basin_boundary=None,
+        group_segments=False,
+        many2many=False
+    ):
+        """
+        Method to get a modified version of the pyGSFLOW _Cascades object
+        for working with the gsflow.builder.PrmsBuilder() class
+
+        Parameters
+        ----------
+        stream_array :
+        basin_boundary :
+        group_segments :
+        many2many :
+
+        Returns
+        -------
+            PgsfCascades object
+        """
+        strm_conn = self.get_stream_connectivity(
+            stream_array=stream_array,
+            group_segments=group_segments
+        )
+        hru_up, hru_down, hru_pct_up, hru_strmseg_down = self.get_cascades(
+            stream_array=stream_array,
+            basin_boundary=basin_boundary,
+            many2many=many2many
+        )
+        casc_flg = 1
+        if many2many:
+            casc_flg = 0
+
+        if stream_array is None:
+            stream_array = self.stream_array.ravel()
+
+        nreaches = np.count_nonzero(stream_array)
+        nsegments = len(strm_conn)
+
+        return PgsfCascades(
+            hru_up_id=hru_up,
+            hru_down_id=hru_down,
+            hru_pct_up=hru_pct_up,
+            hru_slope=self._faobj.slope.ravel(),
+            hru_aspect=self._faobj.aspect.ravel(),
+            hru_area=self._faobj.area.ravel(),
+            hru_strmseg_down_id=hru_strmseg_down,
+            cascade_flag=casc_flg,
+            nsegments=nsegments,
+            nreaches=nreaches
+        )
+
 
 class Topology(object):
     """
@@ -1032,3 +1086,56 @@ class Topology(object):
                     self._sort_util(i, visited, stack)
 
         return stack
+
+
+class PgsfCascades(object):
+    """
+    Object to hold Cascade results for prms and compatible with pyGSFLOW
+    builder methods.
+
+    Parameters
+    ----------
+    hru_up_id : np.ndarray
+        array of hru_up_ids
+    hru_down_id : np.ndarray
+        array of hru_down_ids
+    hru_pct_up : np.ndarray
+        array of percentage of flow from up hru
+    hru_slope : np.ndarray
+        hru_slope
+    hru_aspect : np.ndarray
+        hru_aspect
+    hru_area : np.ndarray
+        array of hru areas
+    hru_strmseg_down_id : np.ndarray
+        array of stream seg id's a cascade connects to
+    cascade_flag : int
+        flag to indicate if many to one or many to many cascades.
+        Default is 1 (many to one), 0 is many to many.
+
+    """
+    def __init__(
+        self,
+        hru_up_id,
+        hru_down_id,
+        hru_pct_up,
+        hru_slope,
+        hru_aspect,
+        hru_area,
+        hru_strmseg_down_id,
+        cascade_flag,
+        nsegments,
+        nreaches,
+    ):
+        self.dany_flag = True
+        self.ncascade = hru_up_id.size
+        self.hru_up_id = hru_up_id
+        self.hru_down_id = hru_down_id
+        self.hru_pct_up = hru_pct_up
+        self.hru_strmseg_down_id = hru_strmseg_down_id
+        self.cascade_flag = cascade_flag
+        self.slope = hru_slope
+        self.aspect = hru_aspect
+        self.area = hru_area
+        self.nsegments = nsegments,
+        self.nreaches = nreaches
