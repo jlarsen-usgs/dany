@@ -1134,8 +1134,8 @@ class PgsfCascades(object):
         self.hru_pct_up = hru_pct_up
         self.hru_strmseg_down_id = hru_strmseg_down_id
         self.cascade_flag = cascade_flag
-        self.slope = hru_slope
-        self.aspect = hru_aspect
-        self.area = hru_area
-        self.nsegments = nsegments,
+        self.hru_slope = hru_slope
+        self.hru_aspect = hru_aspect
+        self.hru_area = hru_area
+        self.nsegments = nsegments
         self.nreaches = nreaches
