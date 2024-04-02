@@ -552,6 +552,59 @@ class FlowDirections:
             )
         return subbasins
 
+    def _get_shared_vertex(self, iverts0, iverts1, verts):
+        """
+
+        :return:
+        """
+        shared = []
+        for iv in iverts0:
+            if iv in iverts1:
+                shared.append(verts[iv])
+
+        if len(shared) > 1:
+            shared = [np.mean(shared, axis=0)]
+
+        return shared
+
+    def _calculate_hru_len(self):
+        fdir = self.flow_direction_array.ravel()
+        verts = self._modelgrid.verts
+        iverts = self._modelgrid.iverts
+        hru_len = []
+        for node, dn_node in enumerate(fdir):
+            shared_vrts = []
+            up_nodes = np.where(fdir == node)[0]
+            ivs = iverts[node]
+            dnivs = iverts[dn_node]
+            shared_vrts.append(self._get_shared_vertex(ivs, dnivs, verts))
+
+            for up_node in up_nodes:
+                upivs = iverts[up_node]
+                shared_vrts.append(self._get_shared_vertex(ivs, upivs, verts))
+
+            shared_vrts = np.array(shared_vrts).T
+            xc, yc = self._xcenters[node], self._ycenters[node]
+            asq = (shared_vrts[0] - xc) ** 2
+            bsq = (shared_vrts[1] - yc) ** 2
+            dist = np.sqrt(asq - bsq)
+            hlen = np.sum(dist) / (len(dist) / 2)
+            hru_len.append(hlen)
+
+        return hru_len
+
+    @property
+    def hru_len(self):
+        """
+        Returns the routed length through the hru based on 2x down hill
+        flow direction
+
+        Returns
+        -------
+        hru_len : np.ndarray
+        """
+        return self._calculate_hru_len()
+
     @property
     def slope(self):
         """
