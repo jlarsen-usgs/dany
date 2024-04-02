@@ -8,12 +8,14 @@ from flopy.utils.voronoi import VoronoiGrid
 from flopy.utils.triangle import Triangle
 
 import numpy as np
+import pandas as pd
 import geopandas as gpd
 from shapely.geometry import LineString
 import warnings
 from shapely.errors import ShapelyDeprecationWarning
 warnings.filterwarnings("ignore", category=ShapelyDeprecationWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 import gsflow
 from gsflow.builder import GenerateFishnet
@@ -35,7 +37,7 @@ def build_lut(f, dtype=int):
 
 
 if __name__ == "__main__":
-    resample_rasters = True
+    resample_rasters = False
     output_ws = Path("data/sagehen_voronoi")
     dem_file = Path("data/dem.img")
     pour_point = Path("data/model_points.shp")
@@ -333,5 +335,113 @@ if __name__ == "__main__":
 
     parameters.add_record_object(hru_percent_imperv, replace=True)
     parameters.add_record_object(carea_max, replace=True)
+
+    # climate parameters
+    parameters.add_record(name="nobs", values=[1, ])
+    outlet_sta = np.nanargmin(conditioned_dem)
+    print(outlet_sta)
+
+    # read in "climate dataframe"
+    cdf = pd.read_csv(geospatial / "climate/sagehen_climate.csv")
+    ldf = pd.read_csv(geospatial / "climate/sagehen_lapse_rates.csv")
+
+    cdf = bu.add_prms_date_columns_to_df(cdf, "date")
+    cdf.rename(
+        columns={
+            'precip': 'precip_0',
+            'tmin': 'tmin_0',
+            'tmax': 'tmax_0',
+            'runoff': 'runoff_0',
+            'date': 'Date'
+        },
+        inplace=True
+    )
+    # reorder dataframe to later build a prms Data object from it
+    cdfcols = [
+        "Year", "Month", "Day", "Hour", "Minute", "Second",
+        "tmax_0", "tmin_0", "precip_0", "runoff_0", "Date"
+    ]
+    cdf = cdf[cdfcols]
+
+    # start climate parameter calculations
+    mean_ppt = bu.get_mean_monthly_from_df(cdf, 'precip_0')
+    cdf["tmax_0"] = bu.fahrenheit_to_celsius(cdf["tmax_0"].values)
+    cdf["tmin_0"] = bu.fahrenheit_to_celsius(cdf["tmin_0"].values)
+    mean_tmax = bu.get_mean_monthly_from_df(cdf, "tmax_0", temperature=True)
+    mean_tmin = bu.get_mean_monthly_from_df(cdf, "tmin_0", temperature=True)
+
+    rain_adj = bu.rain_adj(ppt, mean_ppt)
+    snow_adj = bu.snow_adj(ppt, mean_ppt)
+
+    tmin_lapse = bu.tmin_lapse(ldf.tmin_lapse.values * (5 / 9))
+    tmax_lapse = bu.tmax_lapse(ldf.tmax_lapse.values * (5 / 9))
+
+    tmax_adj = bu.tmax_adj(nhru)
+    tmin_adj = bu.tmin_adj(nhru)
+
+    jh_coef = bu.calculate_jensen_haise(dem, mean_tmin, mean_tmax)
+
+    # add climate parameters to param obj
+    parameters.add_record_object(rain_adj, replace=True)
+    parameters.add_record_object(snow_adj, replace=True)
+    parameters.add_record_object(tmin_lapse, replace=True)
+    parameters.add_record_object(tmax_lapse, replace=True)
+    parameters.add_record_object(tmax_adj, replace=True)
+    parameters.add_record_object(tmin_adj, replace=True)
+    parameters.add_record_object(jh_coef, replace=True)
+    print(outlet_sta)
+
+    parameters.add_record(
+        "outlet_sta",
+        values=[outlet_sta + 1,],
+        dimensions=[["one", 1]],
+        datatype=1
+    )
+    parameters.add_record(
+        "id_obsrunoff",
+        values=[outlet_sta + 1,],
+        dimensions=[["one", 1]],
+        datatype=1
+    )
+
+    parameters.add_record(
+        "tsta_elev",
+        values=[1932.4,],
+        dimensions=[["ntemp", 1]],
+        datatype=2
+    )
+
+    # build the PRMSData oject and the ControlFile object
+    prmsdata = gsflow.prms.PrmsData(data_df=cdf)
+    control_obj = gsflow.builder.ControlFileBuilder().build("saghen_voronoi", parameters, None)
+
+    # build the PrmsModel
+    prms = gsflow.prms.PrmsModel(control_obj, parameters=parameters, data=prmsdata)
+    gsf = gsflow.GsflowModel(control=control_obj, prms=prms, mf=None)
+
+    gsf.control.set_values("start_time", [1982, 10, 1, 0, 0, 0])
+    gsf.control.add_record("end_time", values=[1996, 9, 31, 0, 0, 0])
+    gsf.control.add_record("print_debug", values=[0, ])
+    gsf.control.add_record("modflow_time_zero", values=[1982, 10, 1, 0, 0, 0])
+    gsf.control.add_record("data_file", values=["sagehen_voronoi.data", ])
+    gsf.control.set_values("srunoff_module", values=["srunoff_smidx"])
+    gsf.control.set_values("model_mode", values=["PRMS5"])
+    gsf.control.set_values("subbasin_flag", values=[0, ])
+    gsf.control.set_values("parameter_check_flag", values=[0, ])
+    gsf.control.add_record("statsON_OFF", values=[1])
+    gsf.control.add_record("nstatVars", values=[6])
+    gsf.control.add_record("statVar_element",
+                           values=["1", "1", "1", "1", "1", "1"])
+    gsf.control.add_record("statVar_names",
+                           values=["runoff",
+                                   "basin_cfs",
+                                   "basin_ssflow_cfs",
+                                   "basin_gwflow_cfs",
+                                   "basin_sroff_cfs",
+                                   "basin_dunnian"])
+
+    gsf.control.add_record("stat_var_file", values=["statvar.dat"])
+    gsf.write_input(basename="sagehen_voronoi", workspace=str(output_ws))
+
 
     print('break')
