@@ -591,7 +591,7 @@ class FlowDirections:
             hlen = np.sum(dist) / (len(dist) / 2)
             hru_len.append(hlen)
 
-        return hru_len
+        return np.array(hru_len)
 
     @property
     def hru_len(self):
