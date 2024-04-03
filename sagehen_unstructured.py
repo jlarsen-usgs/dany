@@ -1,4 +1,5 @@
 import os
+import utm
 import flopy
 from pathlib import Path
 from dem_conditioning import fill_nan_values, fill_sinks
@@ -9,6 +10,7 @@ from flopy.utils.triangle import Triangle
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import geopandas as gpd
 from shapely.geometry import LineString
 import warnings
@@ -124,6 +126,16 @@ if __name__ == "__main__":
     facc = fdir.flow_accumulation()
     flen = fdir.hru_len
 
+    cell = np.zeros(vgrid.shape[1:], dtype=int)
+    cell[2] = 1
+    u, v = fdir.vectors
+    pmv = flopy.plot.PlotMapView(modelgrid=vgrid)
+    pmv.plot_vector(u, v)
+    pc = pmv.plot_array(cell, masked_values=[0])
+    pmv.plot_grid(alpha=0.2)
+    plt.colorbar(pc)
+    plt.show()
+
     strms = PrmsStreams(vgrid, fdir)
     stream_array = strms.delineate_streams(contrib_area=1.2e2)
     cascades = strms.get_pygsflow_builder_object(stream_array, group_segments=False)
@@ -131,9 +143,16 @@ if __name__ == "__main__":
     prms_build = PrmsBuilder(None, cascades, vgrid, conditioned_dem)
     parameters = prms_build.build("voronoi_sagehen")
 
+    lat, lon = utm.to_latlon(
+        vgrid.xcellcenters.ravel(),
+        vgrid.ycellcenters.ravel(),
+        10,
+        "N"
+    )
+    parameters.set_values("hru_lat", lat)
+    parameters.set_values("hru_lon", lon)
+
     nhru = parameters.nhru.values[0]
-    # todo: pygsflow input data (climate, soils, etc...)
-    #   builder utilities for other PRMS parameters (soil zone, etc...)
 
     veg_cov_file = output_ws / "lf_veg_cover.txt"
     veg_type_file = output_ws / "lf_veg_type.txt"
@@ -394,7 +413,7 @@ if __name__ == "__main__":
 
     parameters.add_record(
         "outlet_sta",
-        values=[outlet_sta + 1,],
+        values=[1,],
         dimensions=[["one", 1]],
         datatype=1
     )
@@ -412,6 +431,9 @@ if __name__ == "__main__":
         datatype=2
     )
 
+    # update GWR
+    # parameters.set_values("gwr_swale_flag", [0,])
+
     # build the PRMSData oject and the ControlFile object
     prmsdata = gsflow.prms.PrmsData(data_df=cdf)
     control_obj = gsflow.builder.ControlFileBuilder().build("saghen_voronoi", parameters, None)
@@ -428,7 +450,8 @@ if __name__ == "__main__":
     gsf.control.set_values("srunoff_module", values=["srunoff_smidx"])
     gsf.control.set_values("model_mode", values=["PRMS5"])
     gsf.control.set_values("subbasin_flag", values=[0, ])
-    gsf.control.set_values("parameter_check_flag", values=[0, ])
+    gsf.control.add_record("gwr_swale_flag", values=[1,])
+    gsf.control.set_values("parameter_check_flag", values=[1, ])
     gsf.control.add_record("statsON_OFF", values=[1])
     gsf.control.add_record("nstatVars", values=[6])
     gsf.control.add_record("statVar_element",
