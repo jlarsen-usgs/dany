@@ -330,6 +330,7 @@ if __name__ == "__main__":
     parameters.add_record_object(slowcoef_sq, replace=True)
 
     # imperviousness parameters
+    impervious[np.isnan(impervious)] = np.nanmean(impervious)
     hru_percent_imperv = bu.hru_percent_imperv(impervious)
     carea_max = bu.carea_max(impervious)
 
@@ -379,7 +380,7 @@ if __name__ == "__main__":
     tmax_adj = bu.tmax_adj(nhru)
     tmin_adj = bu.tmin_adj(nhru)
 
-    jh_coef = bu.calculate_jensen_haise(dem, mean_tmin, mean_tmax)
+    jh_coef = bu.calculate_jensen_haise(conditioned_dem, mean_tmin, mean_tmax)
 
     # add climate parameters to param obj
     parameters.add_record_object(rain_adj, replace=True)

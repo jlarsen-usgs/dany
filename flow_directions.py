@@ -591,15 +591,12 @@ class FlowDirections:
                 upivs = iverts[up_node]
                 shared_vrts.append(self._get_shared_vertex(ivs, upivs, verts))
 
-            tmp = shared_vrts
             shared_vrts = np.array(shared_vrts).T
             xc, yc = self._xcenters[node], self._ycenters[node]
             asq = (shared_vrts[0] - xc) ** 2
             bsq = (shared_vrts[1] - yc) ** 2
             dist = np.sqrt(asq + bsq)
             hlen = np.sum(dist) / (len(dist) / 2)
-            if np.isnan(hlen):
-                print('break')
             hru_len.append(hlen)
 
         return np.array(hru_len)
@@ -637,6 +634,8 @@ class FlowDirections:
         bsq = (y0 - y1) ** 2
         dist = np.sqrt(asq + bsq)
         slopes = drop / dist
+        # fix for outlet slope
+        slopes = np.where(np.isnan(slopes), 0, slopes)
         return slopes.reshape(self._shape)
 
     @property
