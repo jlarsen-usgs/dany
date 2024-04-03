@@ -7,6 +7,7 @@ from flow_directions import FlowDirections
 from stream_util import PrmsStreams
 from flopy.utils.voronoi import VoronoiGrid
 from flopy.utils.triangle import Triangle
+from flopy.plot import styles
 
 import numpy as np
 import pandas as pd
@@ -465,6 +466,37 @@ if __name__ == "__main__":
                                    "basin_dunnian"])
 
     gsf.control.add_record("stat_var_file", values=["statvar.dat"])
+
+    # temperature adjustments to match sagehen 50m
+    gsf.prms.parameters.tmin_lapse += 1.2
+    gsf.prms.parameters.tmax_lapse += 1.2
+    # gsf.prms.parameters.max_missing *= 2
+
+    # snow adjustments to match sagehen 50m
+    gsf.prms.parameters.tmax_allsnow[:] = 0.7
+    gsf.prms.parameters.add_record(
+        "tmax_allrain_offset", values=[2.1,] * 12, dimensions=[["nmonths", 12]]
+    )
+    gsf.prms.parameters.rad_trncf[:] = 0.8 * gsf.prms.parameters.covden_win.values
+
+    # soil adjustments
+    gsf.prms.parameters.soil_moist_max *= 3
+    gsf.prms.parameters.add_record("jh_coef", values=[0.03,] * 12, dimensions=[('nmonths', 12)])
+
+    # runoff
+    gsf.prms.parameters.snowinfil_max *= 5
+    gsf.prms.parameters.smidx_coef /= 100
+    gsf.prms.parameters.smidx_exp /= 100
+    gsf.prms.parameters.carea_max /= 100
+
+    # interflow
+    gsf.prms.parameters.slowcoef_sq *= 0.1
+    gsf.prms.parameters.slowcoef_lin *= 3
+
+    # recharge
+    gsf.prms.ssr2gw_rate *= 500
+    gsf.prms.sat_threshold /= 3
+
     gsf.write_input(basename="sagehen_voronoi", workspace=str(output_ws))
 
     gsf.run_model(gsflow_exe="gsflow.exe")
@@ -474,3 +506,42 @@ if __name__ == "__main__":
     stats = stats[1096:]
     stats.reset_index(inplace=True, drop=True)
     print('break')
+
+    gw_seepage = stats.basin_cfs_1.values.copy() - (
+            stats.basin_ssflow_cfs_1.values.copy() +
+            stats.basin_sroff_cfs_1.values.copy() +
+            stats.basin_dunnian_1.values.copy()
+    )
+
+    with styles.USGSMap():
+        fig, axis = plt.subplots(2, 1, figsize=(10, 6))
+        plt.rcParams.update({'font.size': 100})
+        axis[0].plot(stats.Date.values, stats.basin_cfs_1.values, color='r', linewidth=2.2, label='simulated voronoi model')
+        axis[0].plot(stats.Date.values, stats.runoff_1.values, '--', color='b', linewidth=1.5, label='measured')
+        handles, labels = axis[0].get_legend_handles_labels()
+        axis[0].legend(handles, labels, bbox_to_anchor=(0.25, 0.65))
+        axis[0].set_xlabel("Date")
+        axis[0].set_ylabel("Streamflow, in cfs")
+        axis[0].set_ylim(0, 300)
+
+        plt.xlabel("Date")
+        plt.ylabel("Streamflow, in cfs")
+        plt.ylim(0, 300)
+
+    with styles.USGSMap():
+
+        axis[1].set_xlabel("Date")
+        axis[1].set_ylabel("Flow Components, in cfs")
+        axis[1].set_yscale("log")
+        plt.xlabel("Date")
+        plt.ylabel("Flow Components, in cfs")
+        plt.yscale("log")
+        plt.ylim(1.0e-3, 1.0e4)
+        axis[1].plot(stats.Date.values, stats.basin_ssflow_cfs_1.values, color='r', linewidth=1.5, label='Interflow')
+        axis[1].plot(stats.Date.values, gw_seepage, color='purple', linewidth=1.5, label='Groundwater seepage')
+        axis[1].plot(stats.Date.values, stats.basin_sroff_cfs_1.values, color='y', linewidth=1.5, label='Hortonian runoff')
+        axis[1].plot(stats.Date.values, stats.basin_dunnian_1.values, color='b', linewidth=1.5, label='Dunnian runoff')
+        handles, labels = axis[1].get_legend_handles_labels()
+        axis[1].legend(handles, labels, bbox_to_anchor=(0.25, 0.65))
+        plt.tight_layout()
+        plt.show()
