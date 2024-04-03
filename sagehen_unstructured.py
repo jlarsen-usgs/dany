@@ -443,5 +443,10 @@ if __name__ == "__main__":
     gsf.control.add_record("stat_var_file", values=["statvar.dat"])
     gsf.write_input(basename="sagehen_voronoi", workspace=str(output_ws))
 
+    gsf.run_model(gsflow_exe="gsflow.exe")
 
+    stats = gsf.prms.get_StatVar()
+
+    stats = stats[1096:]
+    stats.reset_index(inplace=True, drop=True)
     print('break')
