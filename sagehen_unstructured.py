@@ -1,6 +1,7 @@
 import os
 import utm
 import flopy
+import sys
 from pathlib import Path
 from dem_conditioning import fill_nan_values, fill_sinks
 from flow_directions import FlowDirections
@@ -39,9 +40,25 @@ def build_lut(f, dtype=int):
     return d
 
 
+def nash_sutcliffe_efficiency(qsim, qobs, flg=False, nnse=False):
+    if flg:
+        qsim[qsim == 0] = 1e-06
+        qobs[qobs == 0] = 1e-06
+        qsim = np.log(qsim)
+        qobs = np.log(qobs)
+    qsim[np.isinf(qsim)] = np.nan
+    qobs[np.isinf(qobs)] = np.nan
+    numerator = np.nansum((qobs - qsim) ** 2)
+    denominator = np.nansum((qobs - np.nanmean(qobs)) ** 2)
+    nse = 1 - (numerator / denominator)
+    if nnse:
+        nse = 1 / (2 - nse)
+    return nse
+
+
 if __name__ == "__main__":
     resample_rasters = False
-    output_ws = Path("data/sagehen_voronoi")
+    output_ws = Path("data/svt")
     dem_file = Path("data/dem.img")
     pour_point = Path("data/model_points.shp")
     geospatial = Path("data/geospatial")
@@ -126,16 +143,6 @@ if __name__ == "__main__":
     fdir.flow_directions()
     facc = fdir.flow_accumulation()
     flen = fdir.hru_len
-
-    cell = np.zeros(vgrid.shape[1:], dtype=int)
-    cell[2] = 1
-    u, v = fdir.vectors
-    pmv = flopy.plot.PlotMapView(modelgrid=vgrid)
-    pmv.plot_vector(u, v)
-    pc = pmv.plot_array(cell, masked_values=[0])
-    pmv.plot_grid(alpha=0.2)
-    plt.colorbar(pc)
-    plt.show()
 
     strms = PrmsStreams(vgrid, fdir)
     stream_array = strms.delineate_streams(contrib_area=1.2e2)
@@ -467,6 +474,8 @@ if __name__ == "__main__":
 
     gsf.control.add_record("stat_var_file", values=["statvar.dat"])
 
+    gsf.write_input(basename="sagehen_voronoi", workspace=str(output_ws))
+
     # temperature adjustments to match sagehen 50m
     gsf.prms.parameters.tmin_lapse += 1.2
     gsf.prms.parameters.tmax_lapse += 1.2
@@ -480,22 +489,28 @@ if __name__ == "__main__":
     gsf.prms.parameters.rad_trncf[:] = 0.8 * gsf.prms.parameters.covden_win.values
 
     # soil adjustments
-    gsf.prms.parameters.soil_moist_max *= 3
-    gsf.prms.parameters.add_record("jh_coef", values=[0.03,] * 12, dimensions=[('nmonths', 12)])
+    gsf.prms.parameters.soil_moist_max *= 3 # 3 is too high, not generating dunnian runoff
+    gsf.prms.parameters.add_record(
+        "jh_coef", values=[0.03,] * 12, dimensions=[('nmonths', 12)]
+    )
 
     # runoff
-    gsf.prms.parameters.snowinfil_max *= 5
+    gsf.prms.parameters.snowinfil_max[:] = 20
     gsf.prms.parameters.smidx_coef /= 100
     gsf.prms.parameters.smidx_exp /= 100
     gsf.prms.parameters.carea_max /= 100
 
     # interflow
+    # too much interflow, no dunnian runoff currently
     gsf.prms.parameters.slowcoef_sq *= 0.1
     gsf.prms.parameters.slowcoef_lin *= 3
 
     # recharge
-    gsf.prms.ssr2gw_rate *= 500
-    gsf.prms.sat_threshold /= 3
+    gsf.prms.parameters.ssr2gw_rate *= 500 # initial value
+    gsf.prms.parameters.sat_threshold *= 0.80
+
+    gsf.prms.parameters.gwflow_coef[:] = 0.04 # 0.18567077994529374
+    gsf.prms.parameters.gwsink_coef[:] = 0.03 # 0.01755526591999009
 
     gsf.write_input(basename="sagehen_voronoi", workspace=str(output_ws))
 
@@ -512,6 +527,11 @@ if __name__ == "__main__":
             stats.basin_sroff_cfs_1.values.copy() +
             stats.basin_dunnian_1.values.copy()
     )
+
+    nse = nash_sutcliffe_efficiency(
+        stats.basin_cfs_1.values, stats.runoff_1.values, False
+    )
+    print(nse)
 
     with styles.USGSMap():
         fig, axis = plt.subplots(2, 1, figsize=(10, 6))
