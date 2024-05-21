@@ -57,8 +57,8 @@ def nash_sutcliffe_efficiency(qsim, qobs, flg=False, nnse=False):
 
 
 if __name__ == "__main__":
-    resample_rasters = False
-    output_ws = Path("data/svt")
+    resample_rasters = True
+    output_ws = Path("data/sagehen_voronoi")
     dem_file = Path("data/dem.img")
     pour_point = Path("data/model_points.shp")
     geospatial = Path("data/geospatial")
@@ -479,7 +479,6 @@ if __name__ == "__main__":
     # temperature adjustments to match sagehen 50m
     gsf.prms.parameters.tmin_lapse += 1.2
     gsf.prms.parameters.tmax_lapse += 1.2
-    # gsf.prms.parameters.max_missing *= 2
 
     # snow adjustments to match sagehen 50m
     gsf.prms.parameters.tmax_allsnow[:] = 0.7
@@ -489,7 +488,7 @@ if __name__ == "__main__":
     gsf.prms.parameters.rad_trncf[:] = 0.8 * gsf.prms.parameters.covden_win.values
 
     # soil adjustments
-    gsf.prms.parameters.soil_moist_max *= 3 # 3 is too high, not generating dunnian runoff
+    gsf.prms.parameters.soil_moist_max *= 3
     gsf.prms.parameters.add_record(
         "jh_coef", values=[0.03,] * 12, dimensions=[('nmonths', 12)]
     )
@@ -501,16 +500,16 @@ if __name__ == "__main__":
     gsf.prms.parameters.carea_max /= 100
 
     # interflow
-    # too much interflow, no dunnian runoff currently
     gsf.prms.parameters.slowcoef_sq *= 0.1
     gsf.prms.parameters.slowcoef_lin *= 3
 
     # recharge
-    gsf.prms.parameters.ssr2gw_rate *= 500 # initial value
+    gsf.prms.parameters.ssr2gw_rate *= 500
     gsf.prms.parameters.sat_threshold *= 0.80
 
-    gsf.prms.parameters.gwflow_coef[:] = 0.04 # 0.18567077994529374
-    gsf.prms.parameters.gwsink_coef[:] = 0.03 # 0.01755526591999009
+    # groundwater exchange
+    gsf.prms.parameters.gwflow_coef[:] = 0.04
+    gsf.prms.parameters.gwsink_coef[:] = 0.03
 
     gsf.write_input(basename="sagehen_voronoi", workspace=str(output_ws))
 
@@ -520,7 +519,6 @@ if __name__ == "__main__":
 
     stats = stats[1096:]
     stats.reset_index(inplace=True, drop=True)
-    print('break')
 
     gw_seepage = stats.basin_cfs_1.values.copy() - (
             stats.basin_ssflow_cfs_1.values.copy() +
@@ -529,7 +527,7 @@ if __name__ == "__main__":
     )
 
     nse = nash_sutcliffe_efficiency(
-        stats.basin_cfs_1.values, stats.runoff_1.values, False
+        stats.basin_cfs_1.values, stats.runoff_1.values
     )
     print(nse)
 
