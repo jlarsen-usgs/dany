@@ -55,6 +55,10 @@ test = [
 include-package-data = true
 zip-safe = false
 
+[tool.setuptools.dynamic]
+version = {attr = "dany.version.__version__"}
+readme = {file = ["README.md", "LICENSE"], content-type = "text/markdown"}
+
 [tool.setuptools.packages.find]
 include = ["dany", "dany.*"]
 
