@@ -1,0 +1,83 @@
+[build-system]
+requires = [
+    "setuptools >=61",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dany"
+description = "D-Any is a Python package for hydrologic conditioning, flow accumulation, and stream network creation"
+authors = [
+    {name = "Joshua D. Larsen", email = "jlarsen@usgs.gov"},
+]
+maintainers = [
+    {name = "Joshua D. Larsen", email = "jlarsen@usgs.gov"},
+]
+keywords = ["MODFLOW", "PRMS", "GSFLOW", "surface-water", "groundwater", "hydrogeology"]
+license = {text = "The Unlicense"}
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Hydrology",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy >=1.15.0",
+    "matplotlib >=1.4.0",
+    "pandas >=2.0.0",
+    "flopy >=3.6.0"
+]
+dynamic = ["version", "readme"]
+
+[project.optional-dependencies]
+dev = ["dany[lint,test,doc]"]
+lint = [
+    "ruff"
+]
+test = [
+    "dany[lint]",
+    "coverage",
+    "pytest !=8.1.0",
+    "pygsflow",
+    "geopandas",
+    "rasterio",
+    "rasterstats"
+]
+
+[tool.setuptools]
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.packages.find]
+include = ["dany", "dany.*"]
+
+[tool.ruff]
+line-length = 79
+target-version = "py38"
+include = [
+    "pyproject.toml",
+    "dany/**/*.py",
+]
+
+[tool.ruff.lint]
+select = ["F", "E", "I001"]
+ignore = [
+    "E402", # module level import not at top of file
+    "E501", # line too long TODO FIXME
+    "E712", # Avoid equality comparisons to `True`
+    "E722", # do not use bare `except`
+    "E741", # ambiguous variable name
+    "F401", # unused import
+    "F403", # unable to detect undefined names (star imports)
+    "F524", # `.format` missing argument(s) for placeholder(s)
+    "F811", # Redefinition of unused variable
+    "F821", # undefined name TODO FIXME
+    "F841", # local variable assigned but never used
+]
