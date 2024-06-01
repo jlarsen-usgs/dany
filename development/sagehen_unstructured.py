@@ -3,9 +3,7 @@ import utm
 import flopy
 import sys
 from pathlib import Path
-from dem_conditioning import fill_nan_values, fill_sinks
-from flow_directions import FlowDirections
-from stream_util import PrmsStreams
+from dany import fill_nan_values, fill_sinks, FlowDirections, PrmsStreams
 from flopy.utils.voronoi import VoronoiGrid
 from flopy.utils.triangle import Triangle
 from flopy.plot import styles
@@ -58,10 +56,10 @@ def nash_sutcliffe_efficiency(qsim, qobs, flg=False, nnse=False):
 
 if __name__ == "__main__":
     resample_rasters = True
-    output_ws = Path("data/sagehen_voronoi")
-    dem_file = Path("data/dem.img")
-    pour_point = Path("data/model_points.shp")
-    geospatial = Path("data/geospatial")
+    output_ws = Path("../data/sagehen_voronoi")
+    dem_file = Path("../data/dem.img")
+    pour_point = Path("../data/model_points.shp")
+    geospatial = Path("../data/geospatial")
     awc = geospatial / "awc.img"
     ksat = geospatial / "ksat.img"
     clay = geospatial / "clay.img"
@@ -119,7 +117,7 @@ if __name__ == "__main__":
     wsloc = (220000, 4368000)
     srloc = (219250, 4370000)
 
-    tri_ws = Path("data/sagehen_tri_grid")
+    tri_ws = Path("../data/sagehen_tri_grid")
     tri = Triangle(angle=30, model_ws=tri_ws)
     tri.add_polygon(sgdf.geometry.values[0])
     tri.add_polygon(gdf.geometry.values[0], ignore_holes=True)

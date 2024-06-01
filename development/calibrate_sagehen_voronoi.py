@@ -46,8 +46,8 @@ def tune_sagehen(args):
     import os
 
     ws = os.path.abspath(os.path.dirname(__file__))
-    model_ws = os.path.join(ws, "data", "sagehen_voronoi")
-    output_ws = os.path.join(ws, "data", "sagehen_vcal")
+    model_ws = os.path.join(ws, "..", "data", "sagehen_voronoi")
+    output_ws = os.path.join(ws, "..", "data", "sagehen_vcal")
     gsf = gsflow.GsflowModel.load_from_file(
         os.path.join(model_ws, "sagehen_voronoi_cont.control"),
     )
@@ -155,8 +155,8 @@ if __name__ == "__main__":
         if debug:
             objective = tune_sagehen(args)
 
-    model_ws = os.path.join("data", "sagehen_voronoi")
-    cal_ws = os.path.join("data", "sagehen_vcal")
+    model_ws = os.path.join("..", "data", "sagehen_voronoi")
+    cal_ws = os.path.join("..", "data", "sagehen_vcal")
     gsf = gsflow.GsflowModel.load_from_file(
         os.path.join(model_ws, "sagehen_voronoi_cont.control")
     )
