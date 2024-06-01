@@ -60,14 +60,14 @@ version = {attr = "dany.version.__version__"}
 readme = {file = ["README.md", "LICENSE"], content-type = "text/markdown"}
 
 [tool.setuptools.packages.find]
-include = ["dany", "dany.*"]
+include = ["dany",]
 
 [tool.ruff]
 line-length = 79
 target-version = "py38"
 include = [
     "pyproject.toml",
-    "dany/**/*.py",
+    "dany/*.py",
 ]
 
 [tool.ruff.lint]
