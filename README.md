@@ -13,7 +13,7 @@ Installation
 In a command prompt/terminal window run
 
 ```commandline
-pip install https://github.com/jlarsen-usgs/pyhydro/archive/refs/heads/main.zip
+pip install https://github.com/jlarsen-usgs/dany/archive/refs/heads/main.zip
 ```
 
 
