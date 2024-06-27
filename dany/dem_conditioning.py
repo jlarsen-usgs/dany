@@ -36,6 +36,7 @@ def fill_sinks(modelgrid, dem, eps=1e-06, stream_mask=None, method="priority"):
         np.array : filled DEM elevations
     """
     edge_nodes = _identify_edge_nodes(modelgrid)
+    dem = np.copy(dem)
     if stream_mask is not None:
         if method.lower() not in ("priority", "complete"):
             method = "priority"
@@ -79,7 +80,7 @@ def _flood_and_drain_fill(modelgrid, dem, eps=1e-06, seed=0):
         np.ndarray: filled dem
     """
     dem = dem.ravel()
-    neighbors = modelgrid.neighbors(method="queen", as_nodes=True)
+    neighbors = modelgrid.neighbors(method="queen", as_nodes=True, reset=True)
 
     wf = np.ones(dem.size) * 1e+10
     wf[seed] = dem[seed]
@@ -89,7 +90,7 @@ def _flood_and_drain_fill(modelgrid, dem, eps=1e-06, seed=0):
     while modified:
         niter += 1
         modified, wf = _inner_flood_and_drain_fill(dem, wf, eps, neighbors)
-        print(niter)
+        print(f"Flood and Fill conditioning: iteration {niter}")
 
     return wf
 
@@ -198,6 +199,8 @@ def _priority_flood(modelgrid, dem, eps=1e-06, seed=0, streams=False):
                     newdem[c] = np.min(elevs) + eps
 
         for n in neighs:
+            if n >= dem.size:
+                continue
             if closed[n]:
                 continue
             closed[n] = True
