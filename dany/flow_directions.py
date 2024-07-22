@@ -344,7 +344,7 @@ class FlowDirections:
 
         Parameters
         ----------
-        burn_threshold : np.ndarray
+        burn_threshold : float
             digital threshold for small numerical artificats. Upslope elevation
             differences between neighbors within the digital threshold will
             be treated as digitally flat.
