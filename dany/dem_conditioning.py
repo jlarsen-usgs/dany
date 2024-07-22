@@ -23,7 +23,7 @@ def fill_sinks(modelgrid, dem, eps=1e-06, stream_mask=None, method="priority"):
     method : str
         sink fill method. "priority" runs the improved priority-flood algorithm
         described in Barnes and others (2014) which is an efficient single
-        pass filling method epsilon filling method in this implementation.
+        pass epsilon filling method in this implementation.
         "complete" also runs the improved priority-flood algorithm, however
         does not use epsilon filling to correct digitally flat areas of the
         DEM. "drain" uses the direct implementation of Planchon and Darboux,
@@ -207,10 +207,13 @@ def _priority_flood(modelgrid, dem, eps=1e-06, seed=0, streams=False):
             if newdem[n] <= newdem[c]:
                 newdem[n] = newdem[c] + eps
                 pit.append(n)
-            elif not streams:
-                heapq.heappush(open, (newdem[n], n))
+            # continue testing, but I think this elif should be removed
+            #   it seems to really mess up the stream_mask conditioning...
+            # elif not streams:
+            #     heapq.heappush(open, (newdem[n], n))
             else:
-                pass
+                heapq.heappush(open, (newdem[n], n))
+                # pass
 
     return newdem
 
