@@ -2,7 +2,7 @@ import numpy as np
 from collections import defaultdict
 
 
-def fill_sinks(modelgrid, dem, eps=1e-06, stream_mask=None, method="priority"):
+def fill_sinks(modelgrid, dem, eps=2e-06, stream_mask=None, method="priority"):
     """
     Method to fill digital sinks within a DEM. Default is the eps-improved
     priority-flood method. This method is compatible with d-n (any number of
@@ -58,7 +58,7 @@ def fill_sinks(modelgrid, dem, eps=1e-06, stream_mask=None, method="priority"):
     return filled_dem
 
 
-def _flood_and_drain_fill(modelgrid, dem, eps=1e-06, seed=0):
+def _flood_and_drain_fill(modelgrid, dem, eps=2e-06, seed=0):
     """
     Iterative sink fill method based on Planchon and Darboux, 2001:  "A fast
     simple and versitile algorithm to fill the depressions of digital
@@ -140,7 +140,7 @@ def _inner_flood_and_drain_fill(dem, wf, eps, neighbors):
     return modified, wf
 
 
-def _priority_flood(modelgrid, dem, eps=1e-06, seed=0, streams=False):
+def _priority_flood(modelgrid, dem, eps=2e-06, seed=0, streams=False):
     """
     Priority flood method for sink fill operations based on Barnes and others,
     2014, "Priority-flood: An optimal depression-filling and watershed-labeling
