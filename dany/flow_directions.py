@@ -498,7 +498,9 @@ class FlowDirections:
             shapely.GeometryCollection object
             list of [[vertices], ...].
 
-        :return:
+        Returns
+        -------
+        np.array of subbasin numbers
         """
         from flopy.utils.geospatial_utils import GeoSpatialCollection
 
@@ -526,11 +528,16 @@ class FlowDirections:
             current = cellid
             while True:
                 if cellid in visited:
+                    # basin outlet condition 1 circular fdir
                     graph[current] = -1
                     break
                 elif cellid not in cellids or cellid == current:
                     if cellid != current:
                         visited.append(cellid)
+                    elif self._fdir[cellid] == current:
+                        # basin outlet condition 2 fdir set to self
+                        graph[current] = -1
+                        break
                     cellid = self._fdir[cellid]
                 else:
                     graph[current] = cellid
@@ -554,8 +561,10 @@ class FlowDirections:
 
     def _get_shared_vertex(self, iverts0, iverts1, verts):
         """
+        Method to get the shared vertex location of a neighboring cell
 
-        :return:
+        Return:
+            [x, y] coordinate pair
         """
         shared = []
         for iv in iverts0:
