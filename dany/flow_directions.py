@@ -521,8 +521,8 @@ class FlowDirections:
             cellids.append(cellid)
 
         graph = {}
-        visited = []
         for cellid in cellids:
+            visited = []
             current = cellid
             while True:
                 if cellid in visited:
