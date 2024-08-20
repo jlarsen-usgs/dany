@@ -126,7 +126,7 @@ class StreamBase:
                 )
             stream_array = self._stream_array
 
-        stream_array = stream_array.ravel()
+        stream_array = stream_array.copy().ravel()
         strm_nodes = np.where(stream_array)[0]
         # assign an initial reach number to stream cells
         for i in range(1, len(strm_nodes) + 1):
@@ -191,7 +191,7 @@ class StreamBase:
             stream_array = self._stream_array
 
         # 1a) create graph of connectivity via node numbers...
-        stream_array = stream_array.ravel()
+        stream_array = stream_array.copy().ravel()
         strm_nodes = np.where(stream_array)[0]
 
         graph = {}
@@ -778,7 +778,7 @@ class PrmsStreams(StreamBase):
         if stream_array is None:
             stream_array = self.stream_array
 
-        stream_array = stream_array.ravel()
+        stream_array = stream_array.copy().ravel()
 
         if not many2many:
             hru_up_id, hru_down_id, hru_pct_up = \
