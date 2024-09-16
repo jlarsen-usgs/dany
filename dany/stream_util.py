@@ -164,7 +164,9 @@ class StreamBase:
         self._graph = new_map
         return new_map
 
-    def _mf2005_stream_connectivity(self, stream_array=None):
+    def _mf2005_stream_connectivity(
+            self, stream_array=None, group_segments=True
+    ):
         """
         Method to return MF2005 SFR connectivity by segment
 
@@ -173,6 +175,10 @@ class StreamBase:
         stream_array :
             optional array of stream locations, if None is provided method
             looks for an internally stored stream array
+        group_segments : bool
+            boolean flag to group segments by continuous reaches between
+            stream confluences. True is standard (traditional) mf2005
+            behavior. False sets each stream cell as a stand alone segment
 
         Returns
         -------
@@ -201,45 +207,74 @@ class StreamBase:
                 node_dn = None
             graph[node] = node_dn
 
-        nodesup = list(graph.keys())
-        nodesdn = [i for i in graph.values() if i is not None]
+        if group_segments:
+            nodesup = list(graph.keys())
+            nodesdn = [i for i in graph.values() if i is not None]
 
-        # figure out where segments start then use those to map connectivity
-        segstrts = {}
-        iseg = 1
-        for node in nodesup:
-            if node not in nodesdn:
-                segstrts[node] = iseg
-                iseg += 1
-
-        for node in nodesdn:
-            x = np.where(nodesdn == node)[0]
-            if len(x) > 1:
-                if node not in segstrts:
+            # figure out where segments start then use those to map connectivity
+            segstrts = {}
+            iseg = 1
+            for node in nodesup:
+                if node not in nodesdn:
                     segstrts[node] = iseg
                     iseg += 1
 
-        # node, seg, rch --->??
-        # segmap --->?
-        nd_seg_rch = []
-        seg_graph = {}
-        for node, seg in segstrts.items():
-            rch = 1
-            while True:
-                nd_seg_rch.append([node, seg, rch])
-                stream_array[node] = seg
-                rch += 1
+            for node in nodesdn:
+                x = np.where(nodesdn == node)[0]
+                if len(x) > 1:
+                    if node not in segstrts:
+                        segstrts[node] = iseg
+                        iseg += 1
 
-                dnnode = graph[node]
-                if dnnode in segstrts or dnnode is None:
-                    if dnnode is not None:
-                        seg_graph[seg] = segstrts[dnnode]
+            # node, seg, rch --->??
+            # segmap --->?
+            nd_seg_rch = []
+            seg_graph = {}
+            for node, seg in segstrts.items():
+                rch = 1
+                while True:
+                    nd_seg_rch.append([node, seg, rch])
+                    stream_array[node] = seg
+                    rch += 1
+
+                    dnnode = graph[node]
+                    if dnnode in segstrts or dnnode is None:
+                        if dnnode is not None:
+                            seg_graph[seg] = segstrts[dnnode]
+                        else:
+                            seg_graph[seg] = 0
+                        break
+
+                    node = dnnode
+        else:
+            nd_seg = {}
+            seg_graph = {}
+            nd_seg_rch = []
+            seg = 1
+            for node, dnnode in graph.items():
+                if node not in nd_seg:
+                    nd_seg[node] = seg
+                    seg += 1
+                if dnnode not in nd_seg and dnnode is not None:
+                    nd_seg[dnnode] = seg
+                    seg += 1
+
+            # create seg_graph
+            for node, dnnode in graph.items():
+                segup = nd_seg[node]
+                stream_array[node] = segup
+                nd_seg_rch.append([node, segup, 1])
+                if dnnode is not None:
+                    segdn = nd_seg[dnnode]
+                    if segdn == segup:
+                        segdn = 0
                     else:
-                        seg_graph[seg] = 0
-                    break
+                        stream_array[dnnode] = segdn
+                else:
+                    segdn = 0
+                seg_graph[segup] = segdn
 
-                node = dnnode
-
+        # end the grouping code...
         topo = Topology()
         for iseg, ioutseg in seg_graph.items():
             topo.add_connection(iseg, ioutseg)
@@ -273,7 +308,7 @@ class StreamBase:
         self._node_seg_rch = np.array(nd_seg_rch)
         return seg_graph
 
-    def create_stream_vectors(self, stream_array=None):
+    def create_stream_vectors(self, stream_array=None, group_segments=True):
         """
         Method to create stream vectors (lines) from a binary
         stream array
@@ -283,6 +318,10 @@ class StreamBase:
         strm_array : np.ndarray
             optional array of stream locations, if None is provided method
             looks for an internally stored stream array
+        group_segments : bool
+            Boolean flag to group stream cells into segments based on
+            stream confluences. Default is True, which is standard modflow-2005
+            convention. False creates a segment for each stream cell
 
         Returns
         -------
@@ -295,7 +334,9 @@ class StreamBase:
         if stream_array is not None:
             stream_array = stream_array.copy()
             stream_array[np.isnan(stream_array)] = 0
-        seg_graph = self._mf2005_stream_connectivity(stream_array)
+        seg_graph = self._mf2005_stream_connectivity(
+            stream_array, group_segments=group_segments
+        )
         # get headwater segs
         headwaters = []
         seg_graph_r = {v: k for k, v in seg_graph.items()}
@@ -360,7 +401,7 @@ class Sfr6(StreamBase):
 
     def get_stream_connectivity(self, stream_array=None):
         """
-        Method to get modflow 2005 SFR connectivity based on Segments
+        Method to get modflow 6 SFR connectivity based on reaches
 
         Parameters
         ----------
@@ -525,7 +566,7 @@ class Sfr2005(StreamBase):
         self._node_seg_rch = None
         self._seg_graph = None
 
-    def get_stream_connectivity(self, stream_array=None):
+    def get_stream_connectivity(self, stream_array=None, group_segments=True):
         """
         Method to get modflow 2005 SFR connectivity based on Segments
 
@@ -534,6 +575,10 @@ class Sfr2005(StreamBase):
         stream_array : None, np.ndarray
             optional array of stream locations, if None is provided method
             looks for an internally stored stream array
+        group_segments : bool
+            Boolean flag to group stream cells into segments based on
+            stream confluences. Default is True, which is standard modflow-2005
+            convention. False creates a segment for each stream cell
 
         Returns
         -------
@@ -542,9 +587,11 @@ class Sfr2005(StreamBase):
             segment
 
         """
-        return self._mf2005_stream_connectivity(stream_array=stream_array)
+        return self._mf2005_stream_connectivity(
+            stream_array=stream_array, group_segments=group_segments
+        )
 
-    def reach_data(self, stream_array=None):
+    def reach_data(self, stream_array=None, **kwargs):
         """
         Method to generate a basic reach data recarray for Modflow-2005 SFR
         package. Method fills, KRCH, IRCH, JRCH, ISEG, IREACH, and provides
@@ -576,7 +623,10 @@ class Sfr2005(StreamBase):
             stream_array = self._stream_array
 
         if self._seg_graph is None:
-            self._mf2005_stream_connectivity(stream_array)
+            group_segments = kwargs.pop("group_segments", True)
+            self._mf2005_stream_connectivity(
+                stream_array, group_segments=group_segments
+            )
 
         basic_rec = []
         xcenters = self._modelgrid.xcellcenters
@@ -656,7 +706,7 @@ class Sfr2005(StreamBase):
 
         return basic_rec
 
-    def segment_data(self, stream_array=None):
+    def segment_data(self, stream_array=None, **kwargs):
         """
 
         :return:
@@ -672,7 +722,10 @@ class Sfr2005(StreamBase):
             stream_array = self._stream_array
 
         if self._seg_graph is None:
-            self._mf2005_stream_connectivity(stream_array)
+            group_segments = kwargs.pop("group_segments", True)
+            self._mf2005_stream_connectivity(
+                stream_array, group_segments=group_segments
+            )
 
         nseg = len(self._seg_graph)
         segids = []
