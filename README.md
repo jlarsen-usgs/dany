@@ -36,6 +36,7 @@ plans include:
    - autotesting infrastructure
    - example notebooks
    - pypi / conda release
+   - Code peer review and release
 
 
 Disclaimer
