@@ -730,7 +730,7 @@ class Sfr2005(StreamBase):
         nseg = len(self._seg_graph)
         segids = []
         outsegs = []
-        for seg, outseg in sorted(self._seg_graph):
+        for seg, outseg in sorted(self._seg_graph.items()):
             segids.append(seg)
             outsegs.append(outseg)
 
