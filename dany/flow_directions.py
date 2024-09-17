@@ -86,6 +86,14 @@ class FlowDirections:
         """
         return self._facc.reshape(self._shape)
 
+    @property
+    def dem(self):
+        """
+        Method that returns the input DEM
+
+        """
+        return self._dem[:-1].reshape(self._shape)
+
     def _shoelace_area(self):
         """
         Use shoelace algorithm for non-self-intersecting polygons to

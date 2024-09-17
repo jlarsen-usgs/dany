@@ -118,7 +118,7 @@ def tune_sagehen(args):
 
 
 if __name__ == "__main__":
-    calibrate = True
+    calibrate = False
     debug = False
     space = {
         'soil_moist_max_adj': hp.uniform('soil_moist_max_adj', 0.0001, 1.3333),
@@ -142,13 +142,13 @@ if __name__ == "__main__":
 
     else:
         args = {
-            'jh_coef': 0.03665286093082785,
-            'sat_threshold': 578.5778450056432,
-            'slowcoef_lin_adj': 3.362573799283341,
-            'slowcoef_sq_adj': 1.8551608564990651,
-            'soil_moist_max_adj': 0.90084405657269,
-            'ssr2gw_rate_adj': 0.7795299319190928,
-            'tmax_allrain_offset': 3.9111063566957407
+            'jh_coef': 0.03665286093082785,  # x
+            'slowcoef_lin_adj': 3.362573799283341,  # x
+            'slowcoef_sq_adj': 1.8551608564990651,  # x
+            'soil_moist_max_adj': 0.90084405657269,  # x
+            'ssr2gw_rate_adj': 0.7795299319190928,  # x
+            'tmax_allrain_offset': 3.9111063566957407,  # x 0.7503
+            "sat_threshold": 578.5778450056432,  # x
         }
 
 
@@ -186,6 +186,14 @@ if __name__ == "__main__":
     )
     success, buff = gsf.run_model(gsflow_exe="gsflow.exe")
 
+    frontiers_paper_sv = os.path.join(
+        "..", "data", "sagehen_gsflow_output", "sagehen_50m_stat_var.dat"
+    )
+    gsfstats = gsflow.output.StatVar(frontiers_paper_sv)
+    gsfstats = gsfstats.stat_df
+    gsfstats = gsfstats[1096:]
+    gsfstats.reset_index(inplace=True, drop=True)
+
     stats = gsf.prms.get_StatVar()
 
     stats = stats[1096:]
@@ -204,10 +212,12 @@ if __name__ == "__main__":
     with styles.USGSMap():
         fig, axis = plt.subplots(2, 1, figsize=(10, 6))
         plt.rcParams.update({'font.size': 100})
-        axis[0].plot(stats.Date.values, stats.basin_cfs_1.values, color='r',
-                     linewidth=2.2, label='simulated voronoi model')
-        axis[0].plot(stats.Date.values, stats.runoff_1.values, '--', color='b',
-                     linewidth=1.5, label='measured')
+        axis[0].plot(stats.Date.values, stats.basin_cfs_1.values, "--", color='r', alpha=0.75,
+                     linewidth=2.0, label='Voronoi PRMS model', zorder=2)
+        axis[0].plot(gsfstats.Date.values, gsfstats.basin_cfs_1.values, ":",
+                     color="k", linewidth=2.0, label="50m GSFLOW model", zorder=3, alpha=0.6)
+        axis[0].plot(stats.Date.values, stats.runoff_1.values, color='b',
+                     linewidth=2.0, label='measured', zorder=1)
         handles, labels = axis[0].get_legend_handles_labels()
         axis[0].legend(handles, labels, bbox_to_anchor=(0.25, 0.65))
         axis[0].set_xlabel("Date")

@@ -65,7 +65,10 @@ class StreamBase:
         """
         # need to create a trap for unstrucutred grids
         if stream_array.size != self._nnodes:
-            raise ValueError(f"Array size is incompatible with modelgrid size {self._nnodes}")
+            raise ValueError(
+                f"Array size is incompatible with "
+                f"modelgrid size {self._nnodes}"
+            )
 
         self._stream_array = stream_array.reshape(self._shape)
 
@@ -211,7 +214,6 @@ class StreamBase:
             nodesup = list(graph.keys())
             nodesdn = [i for i in graph.values() if i is not None]
 
-            # figure out where segments start then use those to map connectivity
             segstrts = {}
             iseg = 1
             for node in nodesup:
@@ -293,7 +295,7 @@ class StreamBase:
             for iseg, ioutseg in seg_graph.items()
         }
 
-        seg_array = np.zeros((stream_array.shape), dtype=int)
+        seg_array = np.zeros(stream_array.shape, dtype=int)
         for iseg, new_seg in segid_mapper.items():
             idx = np.where(
                 stream_array == iseg,
@@ -391,6 +393,8 @@ class Sfr6(StreamBase):
     """
     def __init__(self, modelgrid, faobj, **kwargs):
         if faobj is not None:
+            # ensure the modelgrid top is consistent with the DEM
+            modelgrid._top = faobj.dem.copy()
             super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
             self.connection_data = None
             self.package_data = None
@@ -561,6 +565,8 @@ class Sfr2005(StreamBase):
     """
     def __init__(self, modelgrid, faobj, **kwargs):
         if faobj is not None:
+            # ensure the modelgrid top is consistent with the DEM
+            modelgrid._top = faobj.dem.copy()
             super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
 
         self._node_seg_rch = None
@@ -666,7 +672,7 @@ class Sfr2005(StreamBase):
                             [self._modelgrid.delr[jrch], self._modelgrid.delc[irch]]
                         )
 
-                    node = self._modelgrid.get_node([(0, irch, jrch),])[0]
+                    node = self._modelgrid.get_node([(0, irch, jrch), ])[0]
                     record = [node, 0, irch, jrch, iseg, rec[-1], rchlen, reachid, reachid + 1]
                     rec_len = len(record)
                     if ix == 0:
@@ -702,9 +708,9 @@ class Sfr2005(StreamBase):
         reach_data["ireach"] = basic_rec[5]
         reach_data["rchlen"] = basic_rec[6]
         reach_data["reachID"] = basic_rec[-2]
-        reach_data["outreach"] = basic_rec[-1]
+        # reach_data["outreach"] = basic_rec[-1]
 
-        return basic_rec
+        return reach_data
 
     def segment_data(self, stream_array=None, **kwargs):
         """
@@ -735,9 +741,187 @@ class Sfr2005(StreamBase):
             outsegs.append(outseg)
 
         recarray = ModflowSfr2.get_empty_segment_data(nsegments=nseg)
-        recarray["nseg"] = outsegs
+        recarray["nseg"] = segids
         recarray["outseg"] = outsegs
         return recarray
+
+    def irunbnd(self, stream_array=None, segment_graph=None, **kwargs):
+        """
+        Method to calculate the UZF irunbnd array for MF2005 based models
+
+        Returns
+        -------
+            np.ndarray
+        """
+        if stream_array is None:
+            if self._stream_array is None:
+                raise AssertionError(
+                    "delineate_streams() must be run prior to mapping the "
+                    "stream connectivity or a binary array of stream cells "
+                    "must be provided"
+                )
+            stream_array = self._stream_array
+
+        if segment_graph is None:
+            if self._seg_graph is None:
+                group_segments = kwargs.pop("group_segments", True)
+                segment_graph = self.get_stream_connectivity(
+                    group_segments=group_segments
+                )
+                stream_array = self._stream_array
+
+        stream_array = self.stream_array.copy().ravel()
+        stream_cells = np.where((stream_array > 0) & (~np.isnan(stream_array)))[0]
+
+        # make a dict of reversed flow directions
+        fdir_r = {}
+        for node, dnnode in enumerate(self._fdir.ravel()):
+            if dnnode not in fdir_r:
+                fdir_r[dnnode] = [node]
+            else:
+                fdir_r[dnnode].append(node)
+
+        # create irunbnd...
+        irunbnd = np.zeros(stream_array.size, dtype=int)
+        visited = []
+        for stream_cell in stream_cells:
+            iseg = stream_array[stream_cell]
+            stack = [stream_cell]
+            irunbnd[stream_cell] = iseg
+            while stack:
+                node = stack.pop()
+                if node not in fdir_r:
+                    continue
+                if node in visited:
+                    continue
+                else:
+                    visited.append(node)
+
+                upnodes = fdir_r[node]
+                irunbnd[upnodes] = iseg
+                stack.extend(upnodes)
+
+        return irunbnd.reshape(self._shape)
+
+    def get_pygsflow_builder_object(
+        self,
+        reach_data=None,
+        segment_data=None,
+        irunbnd=None,
+        apply_defaults=True,
+        **kwargs
+    ):
+        """
+        Method to get a modified version of the pyGSFLOW _Streams object
+        for working with the gsflow.builder classes. This class builds
+        the irunbnd
+
+        reach_data : recarray, None
+            optional reach_data recarray, if it is None reach_data will be
+            built
+        segment_data : recarray, None
+            optional segment_data recarray, if the value is None segment_data
+            recarray will be built
+        irunbnd : np.ndarray, None
+            optional irunbnd array, if the value is None irunbnd will be built
+        apply_defaults : bool
+            boolean flag to apply the pygsflow default parameter values
+            for the reach_data and segment_data records. If False, user
+            must define SFR reach_data and segment_data values.
+        kwargs :
+            keyword arguments including defaults for the SFR pygsflow builder
+
+        Returns
+        -------
+            PygsflowStreams object
+        """
+        defaults = {
+            "reach": {
+                "strhc1": 1.,
+                "strthick": 1.
+            },
+            "segment": {
+                "etsw": 0.,
+                "flow": 1.0,
+                "icalc": 1,
+                "iprior": 0,
+                "pptsw": 0.0,
+                "roughch": 0.025,
+                "runoff": 0.0,
+                "width1": 10,
+                "width2": 10
+            },
+            "pgs_defaults": {
+                "default_slope": 0.001,
+                "min_slope": 0.0001,
+                "max_slope": 1
+            }
+        }
+        group_segments = kwargs.pop("group_segments", True)
+        for k, v in kwargs:
+            if k in defaults["reach"]:
+                defaults["reach"][k] = v
+            elif k in defaults["segment"]:
+                defaults["segment"][k] = v
+            elif k in defaults["pgs_defaults"]:
+                defaults["pgs_defaults"][k] = v
+            else:
+                raise KeyError(
+                    f"{k} is not a supported keyword argument"
+                )
+
+        if reach_data is None:
+            reach_data = self.reach_data(group_segments=group_segments)
+        if segment_data is None:
+            segment_data = self.segment_data(group_segments=group_segments)
+        if irunbnd is None:
+            irunbnd = self.irunbnd(group_segments=group_segments)
+
+        if apply_defaults:
+            pgs_defaults = defaults["pgs_defaults"]
+            reach_defaults = defaults["reach"]
+
+            # Set reach data defaults
+            xcenters = self._modelgrid.xcellcenters.ravel()
+            ycenters = self._modelgrid.ycellcenters.ravel()
+            dem = self._modelgrid.top.ravel()
+            for ix, rec in enumerate(reach_data):
+                node = rec["node"]
+                rec_dn_ix = rec["outreach"] - 1
+                if rec_dn_ix >= len(reach_data):
+                    node_dn = rec["node"]
+                else:
+                    node_dn = reach_data[rec_dn_ix]["node"]
+
+                strtop = dem[node]
+                strtop_dn = dem[node_dn]
+
+                # now for the slope calculation
+                asq = (xcenters[node] - xcenters[node_dn]) ** 2
+                bsq = (ycenters[node] - ycenters[node_dn]) ** 2
+                dist = np.sqrt(asq + bsq)
+
+                if dist == 0:
+                    slope = pgs_defaults["default_slope"]
+                else:
+                    slope = (strtop - strtop_dn) / dist
+
+                if slope > pgs_defaults["max_slope"]:
+                    slope = pgs_defaults["max_slope"]
+                elif slope < pgs_defaults["min_slope"]:
+                    slope = pgs_defaults["min_slope"]
+
+                reach_data[ix]["strtop"] = strtop
+                reach_data[ix]["slope"] = slope
+                for k, v in reach_defaults.items():
+                    reach_data[ix][k] = v
+
+            # set segment data defaults
+            segment_defaults = defaults["segment"]
+            for k, v in segment_defaults.items():
+                segment_data[k] = np.full((len(segment_data),), v)
+
+        return PygsflowStreams(reach_data, segment_data, irunbnd)
 
 
 class PrmsStreams(StreamBase):
@@ -756,6 +940,8 @@ class PrmsStreams(StreamBase):
     """
     def __init__(self, modelgrid, faobj, **kwargs):
         if faobj is not None:
+            # ensure the modelgrid top is consistent with the DEM
+            modelgrid._top = faobj.dem.copy()
             super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
             self._faobj = faobj
 
@@ -995,7 +1181,7 @@ class PrmsStreams(StreamBase):
                 hru_pcts = np.abs(dn_slopes) / np.sum(np.abs(dn_slopes))
                 hru_downs = conns[keep_idx]
 
-                hru_up_id.extend([node,] * len(hru_pcts))
+                hru_up_id.extend([node, ] * len(hru_pcts))
                 hru_down_id.extend(list(hru_downs))
                 hru_pct_up.extend(hru_pcts)
 
@@ -1094,8 +1280,8 @@ class Topology(object):
         ----------
         seg : int
             segment number
-        visited : list
-            list of bools to indicate if location visited
+        visited : dict
+            dict of bools to indicate if location visited
         stack : list
             stack of sorted segment numbers
 
@@ -1141,7 +1327,48 @@ class Topology(object):
         return stack
 
 
-class PygsflowCascades(object):
+class PygsflowCompatBase(object):
+    """
+    Base class for the pygsflow compatability objects
+
+    """
+
+    def __init__(self):
+        pass
+
+    def write(self, f):
+        """
+        Method to write a binary pickle file of the object
+
+        f : str or path
+            file path
+
+        """
+        import pickle
+
+        with open(f, "wb") as foo:
+            pickle.dump(self, foo)
+
+    @staticmethod
+    def read(f):
+        """
+        Method to read a binary pickle file of the object
+
+        f : str or path
+            file path
+
+        Returns
+        -------
+            object
+        """
+        import pickle
+
+        with open(f, "rb") as foo:
+            data = pickle.load(foo)
+        return data
+
+
+class PygsflowCascades(PygsflowCompatBase):
     """
     Object to hold Cascade results for prms and compatible with pyGSFLOW
     builder methods.
@@ -1180,6 +1407,7 @@ class PygsflowCascades(object):
         nsegments,
         nreaches,
     ):
+        super().__init__()
         self.dany_flag = True
         self.ncascade = hru_up_id.size
         self.hru_up_id = hru_up_id
@@ -1192,3 +1420,21 @@ class PygsflowCascades(object):
         self.hru_area = hru_area
         self.nsegments = nsegments
         self.nreaches = nreaches
+
+
+class PygsflowStreams(PygsflowCompatBase):
+    """
+    Container to hold Sfr2005 results and additional related data for
+    building SFR packages and MODFLOW-2005, NWT, and GSFLOW models with
+    pyGSFLOW.
+
+    Parameters
+    ----------
+
+    """
+    def __init__(self, reach_data, segment_data, irunbnd):
+        super().__init__()
+        self.reach_data = reach_data
+        self.segment_data = segment_data
+        self.irunbnd = irunbnd
+        self.dany_flag = True
