@@ -437,7 +437,7 @@ class Sfr6(StreamBase):
             if self._graph is None:
                 if self._stream_array is None:
                     raise AssertionError(
-                        "get_stream_connectivity() must be run or a graph of "
+                        "delineate_streams() must be run or a graph of "
                         "stream connectivity must be provided prior to creating"
                         "the connection data array"
                     )
@@ -486,6 +486,7 @@ class Sfr6(StreamBase):
             graph = self._mf6_stream_connectivity(stream_array)
 
         stream_array = stream_array.ravel()
+        dem_top = self._modelgrid.top
         xcenters = self._modelgrid.xcellcenters.ravel()
         ycenters = self._modelgrid.ycellcenters.ravel()
         connection_data = self.connectiondata(graph)
@@ -524,11 +525,12 @@ class Sfr6(StreamBase):
                 cellid = (node,)
 
             rgrd = self._slope[node] / dist_adj
+            strtop = dem_top[node]
             ncon = len(connection_data[cnt]) - 1
             ustrf = 1.
             ndv = 0
             reachdata.append(
-                (rch, cellid, rlen, 0, rgrd, 0, 0, 0, 0, ncon, ustrf, ndv)
+                (rch, cellid, rlen, 0, rgrd, strtop, 1, 0, 0, ncon, ustrf, ndv)
             )
             cnt += 1
 
