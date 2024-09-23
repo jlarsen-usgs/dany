@@ -639,6 +639,7 @@ class Sfr2005(StreamBase):
         basic_rec = []
         xcenters = self._modelgrid.xcellcenters
         ycenters = self._modelgrid.ycellcenters
+        dem = self._modelgrid.top
         reachid = 1
         seg_rid_lut = {}
         for iseg, outseg in sorted(self._seg_graph.items()):
@@ -669,13 +670,16 @@ class Sfr2005(StreamBase):
                         ) ** 2
                         dist = np.sqrt(a2 + b2)
                         rchlen = dist * 1.5
+                        slope = (dem[irch, jrch] - dem[irch_dn, jrch_dn]) / rchlen
                     else:
                         rchlen = 1.5 * np.mean(
                             [self._modelgrid.delr[jrch], self._modelgrid.delc[irch]]
                         )
+                        slope = 0.0001
 
+                    strtop = dem[irch, jrch]
                     node = self._modelgrid.get_node([(0, irch, jrch), ])[0]
-                    record = [node, 0, irch, jrch, iseg, rec[-1], rchlen, reachid, reachid + 1]
+                    record = [node, 0, irch, jrch, iseg, rec[-1], rchlen, strtop, slope, reachid, reachid + 1]
                     rec_len = len(record)
                     if ix == 0:
                         seg_rid_lut[iseg] = reachid
@@ -709,6 +713,9 @@ class Sfr2005(StreamBase):
         reach_data["iseg"] = basic_rec[4]
         reach_data["ireach"] = basic_rec[5]
         reach_data["rchlen"] = basic_rec[6]
+        reach_data["strtop"] = basic_rec[7]
+        reach_data["slope"] = basic_rec[8]
+        reach_data["strthick"] = np.full((len(reach_data),), 1)
         reach_data["reachID"] = basic_rec[-2]
         # reach_data["outreach"] = basic_rec[-1]
 
@@ -1193,7 +1200,7 @@ class PrmsStreams(StreamBase):
         self,
         stream_array=None,
         basin_boundary=None,
-        group_segments=False,
+        group_segments=True,
         many2many=False
     ):
         """
