@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 from collections import defaultdict
 from .stream_util import Topology
@@ -33,7 +34,7 @@ class FlowDirections:
         else:
             self._shape = self._modelgrid.shape
 
-        self._neighbors = modelgrid.neighbors(method="queen")
+        self._neighbors = copy.deepcopy(modelgrid.neighbors(method="queen"))
         self._area = self._shoelace_area()
         self._fneighbors = None
         # self._dem = dem.ravel()
