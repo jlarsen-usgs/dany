@@ -192,11 +192,44 @@ class FlowDirections:
             if node != -1:
                 continue
             flow_to = fcells[ix]
+
+            continuous = False
+            if len(flow_to) > 1:
+                stack = list(self._fneighbors[ix, flow_to])
+                # check if any are already solved and flow to current node
+                solved = []
+                for idx, test_node in enumerate(stack):
+                    if self._fdir[test_node] == ix:
+                        solved.append(idx)
+
+                for idx in reversed(solved):
+                    flow_to.pop(idx)
+                    stack.pop(idx)
+
+                # check to see if all are continuous neighbors
+                if len(flow_to) > 1:
+                    are_neighbors = [stack.pop(0)]
+                    while stack:
+                        break_cond = True
+                        for test_node in are_neighbors:
+                            test_neighbors = self._fneighbors[test_node]
+                            for tn in test_neighbors:
+                                if tn in stack:
+                                    break_cond = False
+                                    idx = stack.index(tn)
+                                    are_neighbors.append(stack.pop(idx))
+                                    if not stack:
+                                        continuous = True
+                                        break
+
+                        if break_cond:
+                            break
+
             if len(flow_to) == 1:
                 self._fdir[ix] = self._fneighbors[ix, flow_to[0]]
-            elif len(flow_to) == 2:
+            elif len(flow_to) == 2 and continuous:
                 self._fdir[ix] = self._fneighbors[ix, flow_to[0]]
-            elif len(flow_to) == 3:
+            elif len(flow_to) == 3 and continuous:
                 self._fdir[ix] = self._fneighbors[ix, flow_to[-1]]
             else:
                 dest = None
@@ -245,7 +278,6 @@ class FlowDirections:
                     ldest = [dest, ]
                     while self._stack:
                         node_pop = []
-                        # todo: now iterate over ldest to make sure we properly weight the algorithm
                         # for node_to, nodes_from in self._stack.items():
                         for node_to in ldest:
                             nodes_from = self._stack[node_to]
