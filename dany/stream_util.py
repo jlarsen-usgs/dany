@@ -987,6 +987,7 @@ class PrmsStreams(StreamBase):
         stream_array=None,
         basin_boundary=None,
         many2many=False,
+        **kwargs
     ):
         """
         Method to get PRMS/pyWatershed cascades
@@ -1024,6 +1025,11 @@ class PrmsStreams(StreamBase):
 
         """
         if stream_array is None:
+            stream_array = self.stream_array
+
+        if self._graph is None:
+            group_segments = kwargs.pop("group_segments", False)
+            self.get_stream_connectivity(stream_array, group_segments)
             stream_array = self.stream_array
 
         stream_array = stream_array.copy().ravel()
