@@ -92,7 +92,7 @@ def test_get_subbassins():
 
 def test_flow_accumulation_as_area():
     fa_file = data_ws / "flow_accumulation_area.txt"
-    valid_fa = np.genfromtxt(fa_file, dtype=int)
+    valid_fa = np.genfromtxt(fa_file)
 
     fdobj = dany.FlowDirections(grid, dem)
     fdir = fdobj.flow_directions()
@@ -109,7 +109,7 @@ def test_flow_accumulation_as_area():
 
 def test_flow_accumulation_as_cells():
     fa_file = data_ws / "flow_accumulation_as_cells.txt"
-    valid_fa = np.genfromtxt(fa_file, dtype=int)
+    valid_fa = np.genfromtxt(fa_file)
 
     fdobj = dany.FlowDirections(grid, dem)
     fdir = fdobj.flow_directions()
