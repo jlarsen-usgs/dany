@@ -660,7 +660,7 @@ class Sfr2005(StreamBase):
                             nd_dn = None
 
                     _, irch, jrch = self._modelgrid.get_lrc(int(rec[0]))[0]
-                    if nd_dn is not None:
+                    if nd_dn is not None and nd_dn != int(rec[0]):
                         _, irch_dn, jrch_dn = self._modelgrid.get_lrc(int(nd_dn))[0]
                         a2 = (
                             xcenters[irch, jrch] - xcenters[irch_dn, jrch_dn]
@@ -1229,7 +1229,7 @@ class PrmsStreams(StreamBase):
             group_segments=group_segments
         )
         hru_up, hru_down, hru_pct_up, hru_strmseg_down = self.get_cascades(
-            stream_array=stream_array,
+            stream_array=self._stream_array,
             basin_boundary=basin_boundary,
             many2many=many2many
         )

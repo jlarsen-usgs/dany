@@ -135,4 +135,116 @@ def test_prms_streams_cascades():
         )
 
 
+def test_cascades_builder_object():
+    hru_up_file = data_ws / "hru_up_id.txt"
+    hru_dn_file = data_ws / "hru_down_id.txt"
+    hru_pct_file = data_ws / "hru_pct_id.txt"
+    hru_strm_file = data_ws / "hru_strmseg_dn_id.txt"
+    slopes_file = data_ws / "slope.txt"
+    aspect_file = data_ws / "aspect.txt"
 
+    valid_hru_up = np.genfromtxt(hru_up_file, dtype=int)
+    valid_hru_dn = np.genfromtxt(hru_dn_file, dtype=int)
+    valid_hru_pct = np.genfromtxt(hru_pct_file)
+    valid_hru_strm = np.genfromtxt(hru_strm_file, dtype=int)
+    valid_slope = np.genfromtxt(slopes_file)
+    valid_aspect = np.genfromtxt(aspect_file)
+
+    fdobj = dany.FlowDirections(grid, dem)
+    fdobj.flow_directions()
+    fdobj.flow_accumulation()
+
+    strms0 = dany.PrmsStreams(grid, fdobj)
+    stream_array = strms0.delineate_streams(contrib_area)
+    cascades_obj = strms0.get_pygsflow_builder_object(
+        stream_array,
+        group_segments=True
+    )
+
+    if cascades_obj.dany_flag != 1:
+        raise AssertionError("Dany flag not set for pyGSFLOW")
+
+    if not np.allclose(cascades_obj.hru_up_id, valid_hru_up):
+        raise AssertionError(
+            "Cascades hru_up_id not correct"
+        )
+
+    if not np.allclose(cascades_obj.hru_down_id, valid_hru_dn):
+        raise AssertionError(
+            "Cascades hru_dn_id not correct"
+        )
+
+    if not np.allclose(cascades_obj.hru_pct_up, valid_hru_pct):
+        raise AssertionError(
+            "hru percent flow is not correct"
+        )
+
+    if not np.allclose(cascades_obj.hru_strmseg_down_id, valid_hru_strm):
+        raise AssertionError(
+            "hrus not draining to the correct stream segments"
+        )
+
+    if not np.allclose(cascades_obj.hru_slope, valid_slope.ravel()):
+        raise AssertionError(
+            "Slope calculation is not correct"
+        )
+
+    if not np.allclose(cascades_obj.hru_aspect, valid_aspect.ravel()):
+        raise AssertionError(
+            "Aspect calculation is not correct"
+        )
+
+
+def test_sfr2005_reach_data():
+    reach_data_file = data_ws / "reach_data.npy"
+    fdobj = dany.FlowDirections(grid, dem)
+    fdobj.flow_directions()
+    fdobj.flow_accumulation()
+
+    sfrstrms = dany.Sfr2005(grid, fdobj)
+    strm_array = sfrstrms.delineate_streams(contrib_area)
+    reach_data = sfrstrms.reach_data(group_segments=True)
+
+    if len(reach_data) != valid_stream_count:
+        raise AssertionError(
+            "reach data block length is not consistent with number of valid reaches"
+        )
+
+    valid_reach_data = np.fromfile(reach_data_file, dtype=reach_data.dtype)
+
+    if not np.allclose(reach_data.tolist(), valid_reach_data.tolist()):
+        raise AssertionError(
+            "SFR 2005 reach data is not consistent with valid reach data array"
+        )
+
+
+def test_sfr2005_segment_data():
+    segment_data_file = data_ws / "segment_data.npy"
+    fdobj = dany.FlowDirections(grid, dem)
+    fdobj.flow_directions()
+    fdobj.flow_accumulation()
+
+    sfrstrms = dany.Sfr2005(grid, fdobj)
+    strm_array = sfrstrms.delineate_streams(contrib_area)
+    reach_data = sfrstrms.reach_data(group_segments=True)
+    segment_data = sfrstrms.segment_data(group_segments=True)
+
+    if segment_data.size != 10:
+        raise AssertionError(
+            "Segment data block has an incorrect number of segments for problem"
+        )
+
+    valid_segment_data = np.fromfile(segment_data_file, dtype=segment_data.dtype)
+
+    if not np.allclose(segment_data.tolist(), valid_segment_data.tolist()):
+        raise AssertionError(
+            "SFR 2005 segment data is not consistent with valid segment data array"
+        )
+
+
+def test_mf6_connection_data():
+    pass
+
+
+def test_mf6_package_data():
+    pass
