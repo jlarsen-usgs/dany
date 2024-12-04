@@ -220,7 +220,7 @@ def test_sfr2005_reach_data():
 
 
 def test_sfr2005_segment_data():
-    segment_data_file = data_ws / "segment_data.npy"
+    segment_data_file = data_ws / "segment_data.txt"
     fdobj = dany.FlowDirections(grid, dem)
     fdobj.flow_directions()
     fdobj.flow_accumulation()
@@ -235,7 +235,7 @@ def test_sfr2005_segment_data():
             "Segment data block has an incorrect number of segments for problem"
         )
 
-    valid_segment_data = np.fromfile(segment_data_file, dtype=segment_data.dtype)
+    valid_segment_data = np.genfromtxt(segment_data_file)
 
     if not np.allclose(segment_data.tolist(), valid_segment_data.tolist()):
         raise AssertionError(
@@ -268,7 +268,7 @@ def test_mf6_connection_data():
 
 
 def test_mf6_package_data():
-    package_data_file = data_ws / "package_data.npy"
+    package_data_file = data_ws / "package_data.txt"
     fdobj = dany.FlowDirections(grid, dem)
     fdobj.flow_directions()
     fdobj.flow_accumulation()
@@ -278,7 +278,8 @@ def test_mf6_package_data():
 
     connection_data = sfrstrms.connectiondata()
     package_data = sfrstrms.packagedata(detuple=True)
-    valid_package_data = np.fromfile(package_data_file, dtype=package_data.dtype)
+
+    valid_package_data = np.genfromtxt(package_data_file)
 
     if not np.allclose(package_data.tolist(), valid_package_data.tolist()):
         raise AssertionError(

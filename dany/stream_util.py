@@ -575,7 +575,7 @@ class Sfr6(StreamBase):
         new_data = []
         for rec in recarray:
             new_rec = tuple([rec[0],] + [i for i in rec[1]] + list(rec)[2:])
-            new_data = new_rec
+            new_data.append(new_rec)
 
         return np.array(new_data, dtype=dtype)
 
