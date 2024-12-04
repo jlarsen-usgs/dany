@@ -23,18 +23,14 @@ Importing and using "D-Any"
 from dany import fill_sinks, FlowDirections, PrmsStreams, Sfr6, Sfr2005
 ```
 
-For the time being, please refer to the python scripts in the development 
-folder for `dany` usage. The `sagehen_unstructured.py` script is a complete
-example from DEM to a hand calibrated PRMS model.
-
-Full example notebooks are coming soon
+For the time being, please refer to the example notebooks in the examples 
+folder for `dany` usage.
 
 Development Status
 ------------------
 Development is ongoing for the first release of "D-Any", current development
 plans include:
-   - autotesting infrastructure
-   - example notebooks
+   - read the docs
    - pypi / conda release
    - Code peer review and release
 
