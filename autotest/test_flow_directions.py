@@ -4,7 +4,7 @@ import numpy as np
 from pathlib import Path
 
 
-script_ws = Path(__file__)
+script_ws = Path(__file__).parent
 data_ws = script_ws / "../data/freyberg_synthetic"
 dem = data_ws / "freyberg_multi-streams_synthetic.txt"
 idomain = data_ws / "idomain.txt"

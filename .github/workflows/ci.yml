@@ -22,7 +22,7 @@ jobs:
         shell: bash
 
     steps:
-      - name: Checkout pygsflow repo
+      - name: Checkout dany repo
         uses: actions/checkout@v2.3.4
 
       - name: Get branch name
