@@ -1,0 +1,55 @@
+name: D-Any continuous integration
+
+on:
+  push:
+    branches: [main,]
+  pull_request:
+    branches: [main,]
+
+jobs:
+  DanyCI:
+    name: autotests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        python-version: [ "3.11","3.10", 3.9 ]
+        run-type: [ std ]
+        test-pth: [ "./autotest" ]
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout pygsflow repo
+        uses: actions/checkout@v2.3.4
+
+      - name: Get branch name
+        uses: nelonoel/branch-name@v1.0.1
+
+      - name: Cache Miniconda
+        uses: actions/cache@v3.2.4
+        env:
+          # Increase this value to reset cache if environment.yml has changed
+          CACHE_NUMBER: 1
+        with:
+          path: ~/conda_pkgs_dir
+          key: ${{ runner.os }}-${{ matrix.python-version }}-${{ matrix.run-type }}-${{ env.CACHE_NUMBER }}-${{ hashFiles('etc/environment.yml') }}
+
+      - name: Setup Micromamba
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: etc/environment.yml
+          cache-environment: true
+          cache-downloads: true
+          create-args: >-
+            python=${{ matrix.python-version }}
+          init-shell: >-
+            bash
+            powershell     
+
+      - name: Run pytest CI testing for DAny
+        shell: bash -l {0}
+        run: |
+          pytest ./autotest/

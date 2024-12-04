@@ -10,6 +10,7 @@ dependencies:
   - rasterstats
   - shapely
   - pyshp
+  - pytest
 
   - pip:
       - git+https://github.com/modflowpy/flopy@develop
