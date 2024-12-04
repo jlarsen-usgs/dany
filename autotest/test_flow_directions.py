@@ -99,10 +99,12 @@ def test_flow_accumulation_as_area():
     facc = fdobj.flow_accumulation()
 
 
-    if not np.allclose(facc, valid_fa):
-        raise AssertionError(
-            "flow accumulation as area not returning correct values"
-        )
+    np.testing.assert_allclose(
+        facc,
+        valid_fa,
+        err_msg="flow accumulation as area not returning correct values"
+    )
+
 
 
 def test_flow_accumulation_as_cells():
@@ -113,10 +115,11 @@ def test_flow_accumulation_as_cells():
     fdir = fdobj.flow_directions()
     facc = fdobj.flow_accumulation(as_cells=True)
 
-    if not np.allclose(facc, valid_fa):
-        raise AssertionError(
-            "flow accumulation as cells not returning correct values"
-        )
+    np.testing.assert_allclose(
+        facc,
+        valid_fa,
+        err_msg="flow accumulation as cells not returning correct values"
+    )
 
 
 def test_flow_direction_attributes():
