@@ -45,6 +45,7 @@ jobs:
           cache-downloads: true
           create-args: >-
             python=${{ matrix.python-version }}
+          generate-run-shell: false
           init-shell: >-
             bash
             powershell     
