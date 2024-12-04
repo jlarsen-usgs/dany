@@ -50,6 +50,11 @@ jobs:
             bash
             powershell     
 
+      - name: Install Dany
+        shell: bash -l {0}
+        run: |
+          pip install .
+
       - name: Run pytest CI testing for DAny
         shell: bash -l {0}
         run: |
