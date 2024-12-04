@@ -3,6 +3,10 @@ from flopy.discretization import StructuredGrid
 import numpy as np
 from pathlib import Path
 
+
+script_ws = Path(__file__).parent
+data_ws = script_ws / "../data/dem_conditioning"
+
 nrow = 5
 ncol = 5
 nlay = 1
@@ -35,7 +39,6 @@ def test_imp_eps_priority_flood():
 
 
 def test_complete_priority_flood():
-    data_ws = Path("../data/dem_conditioning")
     test_array = data_ws / "sink_array.txt"
     cond_array = data_ws / "complete_conditioned_array.txt"
 
@@ -52,7 +55,6 @@ def test_complete_priority_flood():
 
 
 def test_flood_and_drain_fill():
-    data_ws = Path("../data/dem_conditioning")
     test_array = data_ws / "sink_array.txt"
     cond_array = data_ws / "fd_fill_conditioned_array.txt"
 
