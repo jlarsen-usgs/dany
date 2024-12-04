@@ -21,7 +21,6 @@ sgrid = StructuredGrid(
 
 
 def test_imp_eps_priority_flood():
-    data_ws = Path("../data/dem_conditioning")
     test_array = data_ws / "sink_array.txt"
     cond_array = data_ws / "eps_conditioned_array.txt"
 
