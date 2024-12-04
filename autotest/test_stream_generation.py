@@ -243,8 +243,43 @@ def test_sfr2005_segment_data():
 
 
 def test_mf6_connection_data():
-    pass
+    connection_data_file = data_ws / "connection_data.txt"
+    valid_connection_data = []
+    with open(connection_data_file) as cdf:
+        for line in cdf:
+            rec = tuple([int(i) for i in line.strip().split()])
+            valid_connection_data.append(rec)
+
+    fdobj = dany.FlowDirections(grid, dem)
+    fdobj.flow_directions()
+    fdobj.flow_accumulation()
+
+    sfrstrms = dany.Sfr6(grid, fdobj)
+    strm_array = sfrstrms.delineate_streams(contrib_area)
+
+    connection_data = sfrstrms.connectiondata()
+
+    for ix, rec in enumerate(connection_data):
+        if not np.allclose(rec, valid_connection_data[ix]):
+            raise AssertionError(
+                "SFR6 connection data is not consistent with stored connection data"
+            )
 
 
 def test_mf6_package_data():
-    pass
+    package_data_file = data_ws / "package_data.npy"
+    fdobj = dany.FlowDirections(grid, dem)
+    fdobj.flow_directions()
+    fdobj.flow_accumulation()
+
+    sfrstrms = dany.Sfr6(grid, fdobj)
+    strm_array = sfrstrms.delineate_streams(contrib_area)
+
+    connection_data = sfrstrms.connectiondata()
+    package_data = sfrstrms.packagedata(detuple=True)
+    valid_package_data = np.fromfile(package_data_file, dtype=package_data.dtype)
+
+    if not np.allclose(package_data.tolist(), valid_package_data.tolist()):
+        raise AssertionError(
+            "MF6 package data is not consistent with valid package data block"
+        )

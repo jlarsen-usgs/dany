@@ -396,8 +396,6 @@ class Sfr6(StreamBase):
             # ensure the modelgrid top is consistent with the DEM
             modelgrid._top = faobj.dem.copy()
             super().__init__(modelgrid, faobj._fdir, faobj._facc, faobj._shape)
-            self.connection_data = None
-            self.package_data = None
             self._slope = faobj.slope.ravel()
 
         else:
@@ -460,14 +458,25 @@ class Sfr6(StreamBase):
 
         return connection_data
 
-    def packagedata(self, stream_array=None):
+    def packagedata(self, stream_array=None, detuple=False):
         """
+        Method to get a FloPy compatible package data input block for MF6 SFR package
 
-        :param stream_array:
-        :param kwargs:
-        :return:
+        Parameters
+        ----------
+        stream_array : None, np.ndarray
+            optional array of stream locations, if None is provided method
+            looks for an internally stored stream array
+        detuple: bool
+            Flag to optionally expand the "cellid" field and remove the tuple cellid
+            object from the numpy recarray. Default is False and method is primarily
+            used for unit testing
+
+        Returns
+        -------
+            np.array, returns a structured array that is compatible with flopy's
+            mf6 SFR package data inputs
         """
-        from flopy.mf6 import ModflowGwfsfr
         dist_adj = 1.5
         if stream_array is None:
             if self._graph is None:
@@ -486,7 +495,7 @@ class Sfr6(StreamBase):
             graph = self._mf6_stream_connectivity(stream_array)
 
         stream_array = stream_array.ravel()
-        dem_top = self._modelgrid.top
+        dem_top = self._modelgrid.top.ravel()
         xcenters = self._modelgrid.xcellcenters.ravel()
         ycenters = self._modelgrid.ycellcenters.ravel()
         connection_data = self.connectiondata(graph)
@@ -549,7 +558,26 @@ class Sfr6(StreamBase):
             ("ndv", int)
         ]
         struct_arr = np.array(reachdata, dtype=dtype)
+        if detuple:
+            struct_arr = self._detuple(struct_arr)
         return struct_arr
+
+    def _detuple(self, recarray):
+        odtype = recarray.dtype.descr
+        if len(recarray["cellid"][0]) == 3:
+            cellid = [("k", int), ("i", int), ("j", int)]
+        elif len(recarray["cellid"][0]) == 2:
+            cellid = [("k", int), ("node", int)]
+        else:
+            cellid = [("node", int),]
+
+        dtype = [odtype[0]] + cellid + odtype[2:]
+        new_data = []
+        for rec in recarray:
+            new_rec = tuple([rec[0],] + [i for i in rec[1]] + list(rec)[2:])
+            new_data = new_rec
+
+        return np.array(new_data, dtype=dtype)
 
 
 class Sfr2005(StreamBase):
