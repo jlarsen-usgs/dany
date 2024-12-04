@@ -197,7 +197,7 @@ def test_cascades_builder_object():
 
 
 def test_sfr2005_reach_data():
-    reach_data_file = data_ws / "reach_data.npy"
+    reach_data_file = data_ws / "reach_data.txt"
     fdobj = dany.FlowDirections(grid, dem)
     fdobj.flow_directions()
     fdobj.flow_accumulation()
@@ -211,7 +211,7 @@ def test_sfr2005_reach_data():
             "reach data block length is not consistent with number of valid reaches"
         )
 
-    valid_reach_data = np.fromfile(reach_data_file, dtype=reach_data.dtype)
+    valid_reach_data = np.genfromtxt(reach_data_file)
 
     if not np.allclose(reach_data.tolist(), valid_reach_data.tolist()):
         raise AssertionError(
