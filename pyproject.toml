@@ -50,6 +50,11 @@ test = [
     "rasterio",
     "rasterstats"
 ]
+doc = [
+    "doc[test]",
+    "jupyter",
+    "dataretrieval"
+]
 
 [tool.setuptools]
 include-package-data = true

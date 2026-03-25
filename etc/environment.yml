@@ -9,9 +9,13 @@ dependencies:
   - scipy
   - rasterio
   - rasterstats
+  - geopandas
+  - utm
   - shapely
   - pyshp
+  - dataretrieval
   - pytest
+  - jupyter
 
   - pip:
       - git+https://github.com/modflowpy/flopy@develop

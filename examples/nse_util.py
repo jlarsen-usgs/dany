@@ -2,6 +2,8 @@ import numpy as np
 
 
 def nash_sutcliffe_efficiency(qsim, qobs, flg=False, nnse=False):
+    qsim = qsim.copy()
+    qobs = qobs.copy()
     if flg:
         qsim[qsim == 0] = 1e-06
         qobs[qobs == 0] = 1e-06
