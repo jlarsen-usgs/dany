@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
-        python-version: [ "3.11","3.10", 3.9 ]
+        python-version: [ "3.11","3.10","3.12"]
         run-type: [ std ]
         test-pth: [ "./autotest" ]
     defaults:
