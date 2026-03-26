@@ -304,14 +304,14 @@ class FlowDirections:
 
                         ldest = list(nodes_from)
                         if not ldest:
-                            # todo: need to advance the algorithm for weird splits
-                            #   etc....
+                            # need to advance the algorithm for weird splits
+                            #  etc....
                             ldest = [list(self._stack.keys())[-1],]
 
-                        # todo: may need to improve this algorithm to provide
-                        #  better mapping. flow trace does not solve for all
-                        #  possible cells in the map, it only solves for
-                        #  a routing distance
+                        # may need to improve this algorithm to provide
+                        # better mapping. flow trace does not solve for all
+                        # possible cells in the map, it only solves for
+                        # a routing distance
 
                     if ix not in flow_trace:
                         print('break')

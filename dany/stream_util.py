@@ -167,9 +167,7 @@ class StreamBase:
         self._graph = new_map
         return new_map
 
-    def _mf2005_stream_connectivity(
-            self, stream_array=None, group_segments=True
-    ):
+    def _mf2005_stream_connectivity(self, stream_array=None, group_segments=True):
         """
         Method to return MF2005 SFR connectivity by segment
 
@@ -563,6 +561,20 @@ class Sfr6(StreamBase):
         return struct_arr
 
     def _detuple(self, recarray):
+        """
+        Internal method to remove MF6 recarray tuple cellid data and
+        cast it into unique columns for internal processing
+
+        Parameters
+        ----------
+        recarray : np.recarray
+            recarray of SFR data
+
+        Returns
+        -------
+            np.recarray
+
+        """
         odtype = recarray.dtype.descr
         if len(recarray["cellid"][0]) == 3:
             cellid = [("k", int), ("i", int), ("j", int)]
@@ -751,8 +763,18 @@ class Sfr2005(StreamBase):
 
     def segment_data(self, stream_array=None, **kwargs):
         """
+        Method to generate MODFLOW-2005 based model SFR segment data
 
-        :return:
+        Parameters
+        ----------
+        stream_array : np.ndarray
+            optinal thresholded stream array data. If None, segment_data uses
+            the internal stream_data data object.
+
+        Returns
+        -------
+        np.recarray
+
         """
         from flopy.modflow import ModflowSfr2
         if stream_array is None:
@@ -786,6 +808,14 @@ class Sfr2005(StreamBase):
         """
         Method to calculate the UZF irunbnd array for MF2005 based models
 
+        Parameters
+        ----------
+        stream_array : np.ndarray
+            optional delineated stream array
+        segment_graph : dict
+            optional graph representation of stream connectivity by MF2005 stream
+            segment
+
         Returns
         -------
             np.ndarray
@@ -803,11 +833,12 @@ class Sfr2005(StreamBase):
             if self._seg_graph is None:
                 group_segments = kwargs.pop("group_segments", True)
                 segment_graph = self.get_stream_connectivity(
+                    stream_array=stream_array,
                     group_segments=group_segments
                 )
                 stream_array = self._stream_array
 
-        stream_array = self.stream_array.copy().ravel()
+        stream_array = stream_array.copy().ravel()
         stream_cells = np.where((stream_array > 0) & (~np.isnan(stream_array)))[0]
 
         # make a dict of reversed flow directions
@@ -1243,10 +1274,16 @@ class PrmsStreams(StreamBase):
 
         Parameters
         ----------
-        stream_array :
-        basin_boundary :
-        group_segments :
-        many2many :
+        stream_array : np.ndarray
+            optional stream array
+        basin_boundary : np.ndarray
+            optional delineated basin boundary(ies) array
+        group_segments : bool
+            boolen flags to group stream reaches into continuous segments for
+            modflow-2005/nwt SFR representation. Default is True
+        many2many : bool
+            boolean flag for specifying many to many cascades (True) or many to one
+            (False). Default is False.
 
         Returns
         -------
@@ -1372,7 +1409,8 @@ class Topology(object):
 
 class PygsflowCompatBase(object):
     """
-    Base class for the pygsflow compatability objects
+    Base class for the pygsflow compatability objects. Not to
+    be instantiated by the user
 
     """
 
@@ -1473,7 +1511,12 @@ class PygsflowStreams(PygsflowCompatBase):
 
     Parameters
     ----------
-
+    reach_data: np.recarray
+        FloPy compatible numpy recarray of reach data
+    segment_data : np.recarray
+        FloPy compaible numpy recarray of segment data
+    irunbnd : np.ndarray
+        Array of land surface routining to stream segments for SFR
     """
     def __init__(self, reach_data, segment_data, irunbnd):
         super().__init__()
