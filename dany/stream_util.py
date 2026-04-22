@@ -33,6 +33,8 @@ class StreamBase:
             self._nnodes = self._modelgrid.nnodes
             self._shape = (self._nnodes,)
 
+        self._neighbors = modelgrid.neighbors(as_nodes=False)
+        
     @property
     def stream_array(self):
         """
@@ -131,6 +133,7 @@ class StreamBase:
 
         stream_array = stream_array.copy().ravel()
         strm_nodes = np.where(stream_array)[0]
+
         # assign an initial reach number to stream cells
         for i in range(1, len(strm_nodes) + 1):
             ix = strm_nodes[i - 1]
@@ -375,6 +378,82 @@ class StreamBase:
 
         return vectors
 
+    def threshold_from_control_points(self, points, threshold=0):
+        """
+        Method to get a stream thresholding array with respect to
+        control points. Control points can be added to define outlets
+        of stream segments that user wants to include within the flow accumulation
+        array. Algorithm will map upstream connections based on flow direction and
+        flow accumulation values. This is useful for mapping high elevation tributary
+        streams.
+
+        Parameters
+        ----------
+        points : iterable of geospatial point obejects
+            str : shapefile path
+            PathLike : shapefile path
+            shapefile.Reader object
+            list of [shapefile.Shape, shapefile.Shape,]
+            shapefile.Shapes object
+            flopy.utils.geometry.Collection object
+            list of [flopy.utils.geometry, ...] objects
+            geojson.GeometryCollection object
+            geojson.FeatureCollection object
+            shapely.GeometryCollection object
+            list of [[vertices], ...].
+
+        threshold : float
+            optional threshold value to set surrounding cells not mapped by control
+            point connectivity
+
+        Returns
+        -------
+            np.array
+        """
+        from flopy.utils.geospatial_utils import GeoSpatialCollection
+
+        if isinstance(points, (tuple, list, np.ndarray)):
+            for point in points:
+                if isinstance(point, (tuple, list, np.ndarray)):
+                    if len(point) != 2:
+                        raise AssertionError(
+                            "each point must be an interable with only x, y values"
+                        )
+
+        points = GeoSpatialCollection(points, shapetype='point').points
+
+        cellids = []
+        for point in points:
+            cellid = self._modelgrid.intersect(*point)
+            if isinstance(cellid, tuple):
+                cellid = (0,) + cellid
+                cellid = self._modelgrid.get_node([cellid, ])[0]
+
+            cellids.append(cellid)
+
+        array = np.full(self._facc.shape, threshold).ravel()
+        for node in cellids:
+            stack = [node]
+            while stack:
+                node = stack.pop(0)
+                neighs = self._neighbors[node]
+                array[node] = self._facc[node] - 5
+                flows_in = []
+                acc_val = []
+                for n in neighs:
+                    if self._fdir[n] == node:
+                        if not np.isnan(self._facc[n]):
+                            flows_in.append(n)
+                            acc_val.append(self._facc[n])
+
+                if not flows_in:
+                    continue
+
+                mix = np.argmax(acc_val)
+                stack.append(flows_in[mix])
+
+        return array.reshape(self._shape)
+
 
 class Sfr6(StreamBase):
     """
@@ -412,8 +491,8 @@ class Sfr6(StreamBase):
         Returns
         -------
         segment_graph : dict
-            graph representation of stream connectivity by MF2005 stream
-            segment
+            graph representation of stream connectivity by MF6 stream
+            reach
 
         """
         return self._mf6_stream_connectivity(stream_array=stream_array)

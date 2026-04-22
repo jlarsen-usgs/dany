@@ -47,14 +47,15 @@ def fill_sinks(modelgrid, dem, eps=2e-06, stream_mask=None, method="priority"):
 
         if stream_mask is not None:
             seed = np.where(stream_mask.ravel() > 0)[0]
-            dem = _priority_flood(modelgrid, dem, eps, seed=seed, streams=True)
-            edge_nodes = np.unique(edge_nodes + list(seed))
+            filled_dem = _priority_flood(modelgrid, dem, eps, seed=seed, streams=True)
 
-        filled_dem = _priority_flood(modelgrid, dem, eps, seed=edge_nodes)
+        else:
+            filled_dem = _priority_flood(modelgrid, dem, eps, seed=edge_nodes)
 
     else:
         filled_dem = _flood_and_drain_fill(modelgrid, dem, eps, seed=edge_nodes)
 
+    filled_dem = filled_dem.reshape(dem.shape)
     return filled_dem
 
 
@@ -162,7 +163,7 @@ def _priority_flood(modelgrid, dem, eps=2e-06, seed=0, streams=False):
     streams : bool
         boolean flag to indicate that priority flood is being performed on
         existing stream lines. Method adapted from Condon and Maxwell 2019
-        to support queen neighbor connections.
+        and from Lindsay, 2015.
 
     Returns
     -------
@@ -192,11 +193,12 @@ def _priority_flood(modelgrid, dem, eps=2e-06, seed=0, streams=False):
 
         neighs = neighbors[c]
         if streams:
+            # Condon and Maxwell, 2019
             if c in seed:
                 # pit fill stream cell if needed
                 elevs = [newdem[n] for n in neighs if n in seed]
                 if len(elevs) > 1 and np.min(elevs) > newdem[c]:
-                    newdem[c] = np.min(elevs) + eps
+                        newdem[c] = np.min(elevs) + eps
 
         for n in neighs:
             if n >= dem.size:
@@ -205,15 +207,21 @@ def _priority_flood(modelgrid, dem, eps=2e-06, seed=0, streams=False):
                 continue
             closed[n] = True
             if newdem[n] <= newdem[c]:
-                newdem[n] = newdem[c] + eps
-                pit.append(n)
-            # continue testing, but I think this elif should be removed
-            #   it seems to really mess up the stream_mask conditioning...
-            # elif not streams:
-            #     heapq.heappush(open, (newdem[n], n))
+                if streams:
+                    # Lindsay, 2015: THE PRACTICE OF DEM STREAM BURNING REVISITED
+                    if c not in seed and n not in seed:
+                        newdem[n] = newdem[c] + eps
+                        pit.append(n)
+                    elif c in seed:
+                        newdem[n] = newdem[c] + eps
+                        pit.append(n)
+                    else:
+                        pass
+                else:
+                    newdem[n] = newdem[c] + eps
+                    pit.append(n)
             else:
                 heapq.heappush(open, (newdem[n], n))
-                # pass
 
     return newdem
 

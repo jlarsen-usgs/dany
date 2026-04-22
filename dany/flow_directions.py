@@ -186,11 +186,16 @@ class FlowDirections:
 
         """
         fcells = [
-            list(np.where(slope == np.min(slope))[0]) for slope in slopes
+            list(np.where(slope == np.nanmin(slope))[0]) for slope in slopes
         ]
         for ix, node in enumerate(self._fdir):
             if node != -1:
                 continue
+
+            if np.isnan(self._dem[ix]):
+                self._fdir[ix] = ix
+                continue
+
             flow_to = fcells[ix]
 
             continuous = False
