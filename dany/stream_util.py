@@ -637,7 +637,8 @@ class Sfr6(StreamBase):
         struct_arr = np.array(reachdata, dtype=dtype)
         if detuple:
             struct_arr = self._detuple(struct_arr)
-        return struct_arr
+
+        return struct_arr.view(np.recarray)
 
     def _detuple(self, recarray):
         """

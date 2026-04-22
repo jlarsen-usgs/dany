@@ -36,6 +36,7 @@ def fill_sinks(modelgrid, dem, eps=2e-06, stream_mask=None, method="priority"):
         np.array : filled DEM elevations
     """
     edge_nodes = _identify_edge_nodes(modelgrid)
+    shape = dem.shape
     dem = np.copy(dem)
     if stream_mask is not None:
         if method.lower() not in ("priority", "complete"):
@@ -55,8 +56,7 @@ def fill_sinks(modelgrid, dem, eps=2e-06, stream_mask=None, method="priority"):
     else:
         filled_dem = _flood_and_drain_fill(modelgrid, dem, eps, seed=edge_nodes)
 
-    filled_dem = filled_dem.reshape(dem.shape)
-    return filled_dem
+    return filled_dem.reshape(shape)
 
 
 def _flood_and_drain_fill(modelgrid, dem, eps=2e-06, seed=0):

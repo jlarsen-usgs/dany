@@ -723,6 +723,7 @@ class FlowDirections:
         tuple of vector offsets (U, V) on a unit circle with a radius of 1
 
         """
+        # todo: create an unrotated option; flopy PMV compatible...
         aspect = self.aspect.ravel()
         aspect_radians = aspect * (np.pi / 180)
         u = np.cos(aspect_radians)
