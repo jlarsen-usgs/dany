@@ -384,7 +384,7 @@ class FlowDirections:
 
         return nidp_array
 
-    def flow_directions(self, burn_threshold=1e-6):
+    def flow_directions(self, burn_threshold=1e-6, terminal_cells=None):
         """
         Method to calculate d-n flow directions from DEM data
 
@@ -394,6 +394,10 @@ class FlowDirections:
             digital threshold for small numerical artificats. Upslope elevation
             differences between neighbors within the digital threshold will
             be treated as digitally flat.
+        terminal_cells : list
+            list of cell numbers that represent a terminal condition where flow
+            does not exit the cell. In most cases this is not needed, but in some
+            cases with closed basins it helps to specify these cells.
 
         Returns
         -------
@@ -404,6 +408,20 @@ class FlowDirections:
         self._threshold = burn_threshold
         self._fdir = np.full(self._dem.size - 1, -1)
         self._fdir[self._min_cell] = self._min_cell
+        if terminal_cells:
+            if isinstance(terminal_cells[0], (list, tuple)):
+                if self._modelgrid.grid_type == "structured":
+                    nodes = self._modelgrid.get_node(
+                        [[0] + list(i) for i in terminal_cells]
+                    )
+                else:
+                    raise AssertionError()
+            else:
+                nodes = terminal_cells
+
+            for tc in nodes:
+                self._fdir[tc] = tc
+
         self._fill_irregular_neighbor_array()
         slopes = self._calculate_slopes()
         self._calculate_flowcell(slopes)

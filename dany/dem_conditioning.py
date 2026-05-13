@@ -306,4 +306,4 @@ def fill_nan_values(modelgrid, dem, method="mean"):
         else:
             filled_dem[node] = elev
 
-    return filled_dem
+    return filled_dem.reshape(dem.shape)

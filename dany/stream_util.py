@@ -531,7 +531,7 @@ class Sfr6(StreamBase):
 
         connection_data = []
         for k, v in conn_dict.items():
-            connection_data.append((k,) + tuple(v))
+            connection_data.append((k - 1,) + tuple([ii - 1 if ii > 0 else ii + 1 for ii in v]))
 
         return connection_data
 
@@ -616,7 +616,7 @@ class Sfr6(StreamBase):
             ustrf = 1.
             ndv = 0
             reachdata.append(
-                (rch, cellid, rlen, 0, rgrd, strtop, 1, 0, 0, ncon, ustrf, ndv)
+                (rch - 1, cellid, rlen, 0, rgrd, strtop, 1, 0, 0, ncon, ustrf, ndv)
             )
             cnt += 1
 
@@ -1226,20 +1226,20 @@ class PrmsStreams(StreamBase):
         """
         fdir = self._fdir.copy().ravel()
         if basin_boundary is not None:
-            fdir[basin_boundary.ravel() == 0] = 0
+            fdir[basin_boundary.ravel() == 0] = -9
 
         hru_up_id = []
         hru_down_id = []
         hru_pct_up = []
         for hru_down in fdir:
-            if hru_down == 0:
+            if hru_down == -9:
                 continue
 
             idxs = np.where(fdir == hru_down)[0]
             if len(idxs) == 0:
                 continue
 
-            if fdir[hru_down] == 0:
+            if fdir[hru_down] == -9:
                 # trap for outlets, need to set hru_up and hru_dn to same val
                 idxs = [hru_down]
 
@@ -1286,7 +1286,7 @@ class PrmsStreams(StreamBase):
         """
         fdir = self._fdir.copy().ravel()
         if basin_boundary is not None:
-            fdir[basin_boundary.ravel() == 0] = 0
+            fdir[basin_boundary.ravel() == 0] = -9
 
         hru_up_id = []
         hru_down_id = []
@@ -1298,12 +1298,12 @@ class PrmsStreams(StreamBase):
         ]
 
         for node, hru_down in enumerate(fdir):
-            if hru_down == 0:
+            if hru_down == -9:
                 continue
 
             if node in stream_nodes:
                 # force many to one connection for stream cells
-                if fdir[hru_down] == 0:
+                if fdir[hru_down] == -9:
                     # trap for outlets; set hru_up and hru_down to same val
                     hru_downs = node
                 else:
