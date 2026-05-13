@@ -78,5 +78,5 @@ def test_nan_fill():
         [5, 6, 7, 8, 9]]
     )
     filled = dany.fill_nan_values(sgrid, array)
-    if not np.isclose(filled[12], 5):
+    if not np.isclose(filled[2, 2], 5):
         raise AssertionError("Mean filling not working as intended")
